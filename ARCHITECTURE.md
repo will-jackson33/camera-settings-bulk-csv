@@ -1,4 +1,4 @@
-# camera-settings 1.0.0 - architecture
+# Camera settings - architecture
 
 How the two scripts are built and why. The README is the user guide; this is for whoever
 maintains the tool or has to explain it.
@@ -10,22 +10,21 @@ access. `CCT-Batch.exe` reaches cameras directly over the network, so a technici
 but this folder and CCT installed can read every camera's settings into a zip, and later write
 edited ones back. The editing happens in Excel, on a file the export writes for that purpose.
 
-    SITE                               DESK                             SITE
-    -----                              ----                             -----
-    1 export settings.bat
-      sweep the range, read every
-      camera, write settings.csv
-      and analytics.csv beside CCT's
-      own file (backup), zip  --->     open settings.csv in Excel,
-                                       change the cells, save as CSV
-                                             |
-                                             +------------------>  2 import settings.bat
-                                                                     rollback: backup from the
-                                                                     zip, or a fresh export;
-                                                                     the plan on screen; the
-                                                                     site name typed back; CCT
-                                                                     handed only the cameras
-                                                                     that change; proof export
+```mermaid
+flowchart LR
+  OP([technician on site]) --> EX["<b>export.bat</b><br/>CMD + 7 PowerShell blocks<br/>reads only"]
+  EX -->|"ping sweep, then web-port probe"| NET[("camera subnets")]
+  EX -->|"one run per subnet"| CCT["CCT-Batch.exe -e<br/><i>Motorola, the vendor edge</i>"]
+  CCT --> NET
+  EX --> ZIP[("Site_ACC_Camera_Settings_date.zip<br/>settings.csv + analytics.csv for Excel<br/>backup as CCT wrote it, logs, per-subnet CSVs")]
+  ZIP -->|"emailed to a desk"| XL["Excel<br/>settings.csv edited in place"]
+  XL --> EDITED[("settings.csv, saved as CSV")]
+  EDITED -->|"dropped on site"| IM["<b>import.bat</b><br/>CMD + 6 PowerShell blocks<br/><b>the only writer</b>"]
+  ZIP -->|"backup as the rollback,<br/>or a fresh export"| IM
+  IM -->|"only the cameras that change"| CCT2["CCT-Batch.exe -i, then -e"]
+  CCT2 --> NET
+  IM --> IZIP[("Site_ACC_Camera_Import_date.zip<br/>rollback + settings + after + changes + logs")]
+```
 
 The users are site technicians. Every message the scripts print has to be actionable by someone
 who has never heard of CCT and may be standing in a comms room, which is why the README reads as
@@ -33,8 +32,8 @@ it does.
 
 ## 2. Two files, and what is inside them
 
-    1 export settings.bat     CMD, one file, nothing installed. Only reads.
-    2 import settings.bat     CMD, one file. The only script that changes a camera.
+    export.bat     CMD, one file, nothing installed. Only reads.
+    import.bat     CMD, one file. The only script that changes a camera.
 
 Each is a batch file with its PowerShell embedded after the final `exit /b`, between marker
 pairs like `###PSFORM###` and `###ENDFORM###`, and read out of itself at runtime. That is what
@@ -88,8 +87,29 @@ mistyped can reach a camera.
 ## 4. Import is the only writer
 
 One script writes to cameras, and it is deliberately not the export - one tool that both reads
-and writes will eventually be run in the wrong mode on a customer site. Its gates, in order, any
-of them stopping with nothing written:
+and writes will eventually be run in the wrong mode on a customer site.
+
+```mermaid
+flowchart TD
+  A["settings.csv dropped on import.bat"] --> B{"a settings file?"}
+  B -->|no| S1["STOPPED<br/>nothing written"]
+  B -->|yes| C["<b>1. the rollback</b><br/>backup from the zip,<br/>or export one now"]
+  C --> D["<b>2. compare</b><br/>rollback against the file"]
+  D --> E{"every camera<br/>in the rollback?"}
+  E -->|no| S2["STOPPED<br/>nothing written"]
+  E -->|yes| F["<b>3. the plan, on screen</b><br/>every change: who, from, to<br/>cells left as they are<br/>the CCT runs it will take"]
+  F --> G{"site name<br/>typed back?"}
+  G -->|no, 3 tries| S3["STOPPED<br/>nothing written"]
+  G -->|yes| H{"file sets<br/>a password?"}
+  H -->|yes| I{"ROTATE typed?"}
+  I -->|no| S3
+  I -->|yes| J
+  H -->|no| J["<b>5. the import</b><br/>only the cameras that change,<br/>one run per neighbouring group"]
+  J --> K["<b>6. proof export</b><br/>the same cameras read back"]
+  K --> V["SUCCESS / PARTIAL<br/>+ the zip, with rollback in it"]
+```
+
+The gates in words, any of them stopping with nothing written:
 
 1. **The rollback.** The export the file came from, handed in as a file (`backup` from the zip,
    offered when it sits beside the dropped file), or a fresh export of every subnet the file
@@ -192,8 +212,8 @@ Upgrading a site: go straight to 2.16.0.0.
 
 ## 8. Layout, and the one route to "checked"
 
-    1 export settings.bat     CMD, one file, nothing installed. Seven embedded PowerShell blocks
-    2 import settings.bat     CMD, one file, the only script that changes a camera. Six blocks
+    export.bat                CMD, one file, nothing installed. Seven embedded PowerShell blocks
+    import.bat                CMD, one file, the only script that changes a camera. Six blocks
     README.md                 the user guide
     ARCHITECTURE.md           this file
     pyproject.toml            the Python tooling's configuration

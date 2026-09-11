@@ -13,9 +13,9 @@ rem parenthesised line and never on a PowerShell command line; no delayed expans
 rem PowerShell blocks live after the final exit /b and are read out of this file at runtime.
 
 setlocal
-rem One number in three places - here, in "1 export settings.bat" and in camerasettings_main.py -
+rem One number in three places - here, in "export.bat" and in camerasettings_main.py -
 rem and tests/check_bat.py refuses a mismatch. Bumped on every edit, with its CHANGELOG entry.
-set "VERSION=1.0.0"
+set "VERSION=1.0.1"
 title Camera Configuration Tool - Settings Import %VERSION%
 color 07
 
@@ -415,7 +415,7 @@ echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
 echo   What to do      Install the Camera Configuration Tool (version 2.16 or newer), then run
-echo                   "2 import settings.bat" again.
+echo                   "import.bat" again.
 echo.
 echo %TTL%%RULE%%RST%
 echo.
@@ -437,7 +437,7 @@ echo                   or the prompt was closed.
 echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
-echo   What to do      Run "2 import settings.bat" again and answer Yes.
+echo   What to do      Run "import.bat" again and answer Yes.
 echo.
 echo %TTL%%RULE%%RST%
 echo.
@@ -459,7 +459,7 @@ echo                   rights. That is usually a company policy on this machine.
 echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
-echo   What to do      Right-click "2 import settings.bat" yourself and choose "Run as
+echo   What to do      Right-click "import.bat" yourself and choose "Run as
 echo                   administrator". If that fails too, run it from a different machine
 echo                   on the camera network.
 echo.
@@ -482,7 +482,7 @@ echo                   that could not be understood.
 echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
-echo   What to do      Run "2 import settings.bat" again, type each answer and press Enter.
+echo   What to do      Run "import.bat" again, type each answer and press Enter.
 echo.
 echo %TTL%%RULE%%RST%
 echo.
@@ -507,7 +507,7 @@ echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
 echo   What to do      Check the file opens in Excel with MacAddress and Name in its first row,
-echo                   then run "2 import settings.bat" again with it.
+echo                   then run "import.bat" again with it.
 echo.
 echo %TTL%%RULE%%RST%
 echo.

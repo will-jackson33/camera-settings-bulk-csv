@@ -1,10 +1,15 @@
 # Changelog
 
-The version is the `VERSION=` line near the top of each script, printed in its banner and its
-window title, and `__version__` in `camerasettings_main.py`; the checker refuses a mismatch
-between the three. Patch for a fix, minor for something new that breaks nothing, major for
-something that breaks. Every commit in this repository is a version bump and is named for it,
-with its entry here in the same commit.
+`MAJOR.MINOR.UPDATE`. The last number counts every edit; the first two move when a release is
+called. It lives in the `VERSION=` line near the top of each script, printed in the banner and the
+window title, and in `__version__` in `camerasettings_main.py`; the checker refuses a mismatch
+between the three. Every commit here is a version bump, is named for it, and carries its line
+below.
+
+## 1.0.x — in progress
+
+- **1.0.1** The two scripts are `export.bat` and `import.bat`. They were `1 export settings.bat`
+  and `2 import settings.bat`, so a shortcut or a note naming the old files will not find them.
 
 ## 1.0.0 — 2026-09-11
 
@@ -36,8 +41,7 @@ The first release built to be handed to a site. Everything before it carried no 
   split wherever an unchanged camera sits between two that change. The proof export walks the
   same ranges. Two renames on a 97-camera subnet went from about two minutes and 97 cameras
   written to two short runs and two cameras.
-- The two scripts are `1 export settings.bat` and `2 import settings.bat`, numbered in the order
-  they are run. Nothing else at the root is for a technician.
+- The root holds two scripts and nothing else a technician has to look past.
 - `camera.log` in the import zip carries one table per phase and says how many cameras were
   written to and how many CCT runs it took.
 - The two files nobody should open in Excel carry no extension: `backup` in the export zip and

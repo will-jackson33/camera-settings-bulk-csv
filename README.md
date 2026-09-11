@@ -1,11 +1,11 @@
-# camera-settings 1.0.0 - user guide
+# Camera settings - user guide
 
 For the person on site and the person at the desk. Two scripts, one spreadsheet, no installing.
 How it is built, and why: `ARCHITECTURE.md`.
 
-    1  On site     run  1 export settings.bat        reads every camera into a zip. Changes nothing.
+    1  On site     run  export.bat      reads every camera into a zip. Changes nothing.
     2  At a desk   open settings.csv from the zip in Excel, change what needs changing, save.
-    3  On site     run  2 import settings.bat        writes only the cameras you changed, with a way back.
+    3  On site     run  import.bat      writes only the cameras you changed, with a way back.
 
 If you only ever read this page: the export changes nothing, the import shows you exactly what it
 will change and waits for you to type the site name before it touches a camera, and the zip it
@@ -26,7 +26,7 @@ versions of the Motorola tool need it and crash without it.
 
 ## 2. Export, on site
 
-1. Double-click **`1 export settings.bat`**. Answer Yes to the administrator prompt.
+1. Double-click **`export.bat`**. Answer Yes to the administrator prompt.
 2. Fill the form. The cursor steps down as you press Enter:
 
        Site name                 :   
@@ -92,7 +92,7 @@ Send the folder - `settings.csv` and the backup file at least - back to site.
 ## 4. Import, on site
 
 1. Put the edited `settings.csv` and the backup file from the export in one folder on the machine.
-2. **Drag `settings.csv` onto `2 import settings.bat`.** Answer Yes to the administrator prompt.
+2. **Drag `settings.csv` onto `import.bat`.** Answer Yes to the administrator prompt.
    The form opens with the file already in place:
 
        Site name                 :   type the site name - you will type it again to confirm
@@ -152,7 +152,7 @@ Send the folder - `settings.csv` and the backup file at least - back to site.
 
 ## 5. Undoing a change
 
-Drag **`rollback`** from the import zip onto `2 import settings.bat` and run it exactly as
+Drag **`rollback`** from the import zip onto `import.bat` and run it exactly as
 above. It is an ordinary settings file holding every camera as it was, so the plan shows the
 changes reversed and only those cameras are touched again.
 

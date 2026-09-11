@@ -14,8 +14,8 @@ import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BAT = Path(os.environ.get("CAMERA_SETTINGS_BAT", ROOT / "1 export settings.bat"))
-IMPORT_BAT = Path(os.environ.get("CAMERA_SETTINGS_IMPORT_BAT", ROOT / "2 import settings.bat"))
+BAT = Path(os.environ.get("CAMERA_SETTINGS_BAT", ROOT / "export.bat"))
+IMPORT_BAT = Path(os.environ.get("CAMERA_SETTINGS_IMPORT_BAT", ROOT / "import.bat"))
 CCT_EXE = Path(r"C:\Program Files (x86)\Motorola Solutions\Camera Configuration Tool\CCT-Batch.exe")
 STUB = Path(__file__).with_name("stub_cct.py")
 

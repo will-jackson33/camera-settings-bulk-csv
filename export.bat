@@ -17,9 +17,9 @@ rem command line - it goes through the environment. No delayed expansion, ever: 
 rem passwords containing !.
 
 setlocal
-rem One number in three places - here, in "2 import settings.bat" and in camerasettings_main.py -
+rem One number in three places - here, in "import.bat" and in camerasettings_main.py -
 rem and tests/check_bat.py refuses a mismatch. Bumped on every edit, with its CHANGELOG entry.
-set "VERSION=1.0.0"
+set "VERSION=1.0.1"
 title Camera Configuration Tool - Settings Export %VERSION%
 color 07
 
@@ -332,7 +332,7 @@ echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
 echo   What to do      Install the Camera Configuration Tool (version 2.16 or newer), then run
-echo                   "1 export settings.bat" again. If it is installed somewhere unusual, the
+echo                   "export.bat" again. If it is installed somewhere unusual, the
 echo                   CCT= line near the top of this file holds the path to change.
 echo.
 echo %TTL%%RULE%%RST%
@@ -355,7 +355,7 @@ echo                   or the prompt was closed.
 echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
-echo   What to do      Run "1 export settings.bat" again and answer Yes. The Camera
+echo   What to do      Run "export.bat" again and answer Yes. The Camera
 echo                   Configuration Tool needs administrator rights on this machine, and
 echo                   without them it crashes rather than reporting properly.
 echo.
@@ -379,7 +379,7 @@ echo                   rights. That is usually a company policy on this machine.
 echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
-echo   What to do      Right-click "1 export settings.bat" yourself and choose "Run as
+echo   What to do      Right-click "export.bat" yourself and choose "Run as
 echo                   administrator". If that fails too, this machine's policy blocks it -
 echo                   run the export from a different machine on the camera network.
 echo.
@@ -402,7 +402,7 @@ echo                   that could not be understood.
 echo.
 echo   Changed         Nothing. No camera was touched.
 echo.
-echo   What to do      Run "1 export settings.bat" again, type each answer into the form
+echo   What to do      Run "export.bat" again, type each answer into the form
 echo                   and press Enter after it.
 echo.
 echo %TTL%%RULE%%RST%
