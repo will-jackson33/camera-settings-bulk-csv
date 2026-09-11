@@ -1,0 +1,40 @@
+# Tool configuration for the Python side of camera-settings: the test oracle for CCT's file format
+# and the desk tools. Dependencies are pinned in scripts\dev\requirements.txt and
+# scripts\dev\requirements-test.txt, which scripts\dev\venv.cmd installs into .venv on first run.
+# Every tool's cache lives under .venv so the root holds nothing a technician has to look past.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+cache_dir = ".venv/cache/pytest"
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src/camerasettings"
+explicit_package_bases = true
+strict = true
+cache_dir = ".venv/cache/mypy"
+
+[[tool.mypy.overrides]]
+module = ["openpyxl", "openpyxl.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+cache-dir = ".venv/cache/ruff"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C901", "UP", "B", "S", "SIM"]
+ignore = [
+    "E501",  # 120 characters, set above
+    "S101",  # assert is fine outside production paths
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: assert, per-suite sys.path before imports, hard-coded fixture credentials.
+"**/test_*.py" = ["S101", "S105", "S106", "E402"]
+"tests/conftest.py" = ["E402"]
+# The stand-in CCT and the test plumbing spawn the real script and the real tool on purpose.
+"tests/integration/*.py" = ["S603", "S607"]
+# mutate.py spawns pytest against a copy of a script it just wrote - that is the whole point.
+"scripts/dev/*.py" = ["S603"]

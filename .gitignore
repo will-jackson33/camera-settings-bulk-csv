@@ -1,0 +1,35 @@
+# Export output is client data - camera names, IP schemes, site layout, and on import even
+# credentials. It lands next to the scripts by design, so the repo must refuse it by name.
+# Git cannot forget a file once committed, and these zips get emailed around; the repo is not
+# where they live.
+*_ACC_Camera_Settings_*/
+*_ACC_Camera_Settings_*.zip
+*_ACC_Camera_Import_*/
+*_ACC_Camera_Import_*.zip
+*.csv
+backup
+rollback
+
+# What the editor and the compare tool write beside a CSV: camera names, old and new.
+edit.log
+edit_*.log
+compare.log
+compare_*.log
+compare.html
+compare_*.html
+
+# The working notes behind the tool stay on disk and out of the repository.
+docs/
+CLAUDE.md
+
+# Older exports from before the naming scheme
+CCT-Export-*/
+CCT-Export-*.zip
+
+# The Python side lives entirely in this folder, the tool caches under it
+.venv/
+__pycache__/
+
+# OS
+Thumbs.db
+desktop.ini

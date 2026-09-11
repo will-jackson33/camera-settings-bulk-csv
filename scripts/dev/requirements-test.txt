@@ -1,0 +1,4 @@
+# What scripts/dev/check.cmd runs. Installed into .venv beside the runtime pins.
+pytest==9.1.1
+ruff==0.16.6
+mypy==2.3.1
