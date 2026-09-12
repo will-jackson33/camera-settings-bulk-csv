@@ -19,7 +19,7 @@ rem passwords containing !.
 setlocal
 rem One number in three places - here, in "import.bat" and in camerasettings_main.py -
 rem and tests/check_bat.py refuses a mismatch. Bumped on every edit, with its CHANGELOG entry.
-set "VERSION=1.0.4"
+set "VERSION=1.0.5"
 title Camera Configuration Tool - Settings Export %VERSION%
 color 07
 

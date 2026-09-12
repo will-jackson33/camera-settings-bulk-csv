@@ -350,6 +350,22 @@ class NetworkChangeTest(unittest.TestCase):
         finally:
             run.close()
 
+    def test_switching_a_static_camera_to_dhcp(self):
+        # The other direction: the person sets DHCPEnabled True on a camera that has a fixed
+        # address. The address columns go blank - CCT needs them blank or unchanged with DHCP on -
+        # and the camera is written last like any other network change.
+        run = ImportRun({"127.0.0.10": "Cam A"}, ["n", ""], plan_extra={"cameras": self.SITE},
+                        readable={"DHCPEnabled": "True"}, rollback="cct")
+        try:
+            row = run.device_row("settings.csv", self.MAC_A)
+            self.assertEqual(row[8], "True")
+            self.assertEqual([row[11], row[12], row[13]], ["", "", ""])
+            self.assertIn("NETWORK CHANGES - written last, after every other camera:", run.result.stdout)
+            self.assertIn("handed to DHCP", run.result.stdout)
+            self.assertIn("an address DHCP gives it", run.result.stdout)
+        finally:
+            run.close()
+
     def test_the_camera_that_moves_is_written_last(self):
         # Cam C is renamed and Cam A is moving: the rename goes first, on its own run, and the
         # address change follows. A run never spans the other group.

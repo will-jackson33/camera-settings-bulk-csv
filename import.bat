@@ -15,7 +15,7 @@ rem PowerShell blocks live after the final exit /b and are read out of this file
 setlocal
 rem One number in three places - here, in "export.bat" and in camerasettings_main.py -
 rem and tests/check_bat.py refuses a mismatch. Bumped on every edit, with its CHANGELOG entry.
-set "VERSION=1.0.4"
+set "VERSION=1.0.5"
 title Camera Configuration Tool - Settings Import %VERSION%
 color 07
 

@@ -8,6 +8,10 @@ below.
 
 ## 1.0.x — in progress
 
+- **1.0.5** Switching a camera from a fixed address to DHCP is covered by a test: the address
+  columns go out blank, the camera is written last like any other network change, and the plan
+  says the address will come from DHCP.
+
 - **1.0.4** Compiled Python left over from a test run was being tracked. Removed, and the repository
   now holds only what a person wrote.
 
