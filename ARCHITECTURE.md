@@ -105,7 +105,9 @@ flowchart TD
   I -->|no| S3
   I -->|yes| J
   H -->|no| J["<b>5. the import</b><br/>only the cameras that change,<br/>one run per neighbouring group"]
-  J --> K["<b>6. proof export</b><br/>the same cameras read back"]
+  J --> P{"anything but<br/>names and places?"}
+  P -->|no| V
+  P -->|yes| K["<b>6. proof export</b><br/>the same cameras read back"]
   K --> V["SUCCESS / PARTIAL<br/>+ the zip, with rollback in it"]
 ```
 
@@ -123,7 +125,13 @@ The gates in words, any of them stopping with nothing written:
 4. **The site name, typed back exactly**, three tries.
 5. **A second typed word, ROTATE**, when and only when the file sets a password.
 6. **A proof export afterwards**, held against what CCT was given: what changed, and anything
-   that did not take, named per camera and per setting.
+   that did not take, named per camera and per setting. It is skipped, and the job finishes in one
+   run, when the file changed nothing but `Name` and `Location` - those cannot quietly go wrong in
+   a way that matters, and a rename that did not take is plain to see in the Control Center.
+   Everything else is read back, because CCT's reply says what it *sent*, not what the camera
+   *kept*: at the second live site it reported a camera edited while that camera had quietly gone
+   back to DHCP for its time. The plan says which of the two you are getting - `Read back after` -
+   before you commit, and the verdict says it again at the end.
 
 **The four network columns are decided together**, because CCT validates them together and
 because an address is the one change that can lose a camera:

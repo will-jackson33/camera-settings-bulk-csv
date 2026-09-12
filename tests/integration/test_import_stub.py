@@ -23,13 +23,22 @@ def ordered(names: dict[str, str]) -> list[str]:
     return sorted(names, key=lambda ip: tuple(int(o) for o in ip.split(".")))
 
 
-def write_import_file(path: Path, names: dict[str, str], password: str = "", dhcp: bool = False) -> None:
-    """A settings file to import, in the stand-in's own row shape, carrying the names asked for."""
+def write_import_file(path: Path, names: dict[str, str], password: str = "", dhcp: bool = False,
+                      cells: dict[str, dict[str, str]] | None = None) -> None:
+    """A settings file to import, in the stand-in's own row shape, carrying the names asked for.
+
+    cells overrides named columns on one camera's Device row, keyed by address, the way a person
+    changes a second setting on one camera in the file and nothing on the others."""
+    columns = HEADER[0].split("\t")
     rows = list(HEADER)
     for n, ip in enumerate(ordered(names), 1):
         device, analytics = device_rows(n, ip, names[ip])
         if dhcp:
             device = device.replace("\tFalse\tTrue\t80;443\t", "\tTrue\tTrue\t80;443\t", 1)
+        for column, value in (cells or {}).get(ip, {}).items():
+            fields = device.split("\t")
+            fields[columns.index(column)] = value
+            device = "\t".join(fields)
         rows += [device + password, analytics]  # the row ends with the two empty credential fields
     path.write_text("\n".join(rows) + "\n", encoding="utf-16", newline="\r\n")
 
@@ -63,11 +72,13 @@ class ImportRun:
     readable: the file is the readable pair rather than CCT's own, with these cells overridden.
     rollback: "cct" or "readable" hands the site's current state in as the rollback file instead
     of leaving the field blank, which exports one.
+    cells: extra columns changed on one camera of CCT's own file, keyed by address.
     """
 
     def __init__(self, names: dict[str, str], typed: list[str], plan_extra: dict | None = None, password: str = "",
                  readable: dict[str, str] | None = None, rollback: str | None = None, drop: bool = False,
-                 dhcp: bool = False, move: tuple[str, str] | None = None):
+                 dhcp: bool = False, move: tuple[str, str] | None = None,
+                 cells: dict[str, dict[str, str]] | None = None):
         self.tmp = tempfile.TemporaryDirectory()
         work = Path(self.tmp.name)
         (work / "appdata" / CCT_LOG_DIR).mkdir(parents=True)
@@ -78,7 +89,7 @@ class ImportRun:
         self.script = prepare_script(work, self.stub, script=IMPORT_BAT, cct_calls=2)
         if readable is None:
             self.csv = work / "drop" / "settings.edited.csv"
-            write_import_file(self.csv, names, password, dhcp=dhcp)
+            write_import_file(self.csv, names, password, dhcp=dhcp, cells=cells)
         else:
             self.csv = work / "drop" / "settings.csv"
             write_readable_pair(self.csv, names, readable, dhcp=dhcp)
@@ -147,10 +158,13 @@ class ImportRun:
 class ImportAppliesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Two renames asked for; the stand-in refuses to apply the one on 127.0.0.11, which is how
-        # a camera that accepts the write and keeps its old value looks from outside.
+        # Two renames asked for, and a new hostname on one of them so the job is not names alone
+        # and the cameras are read back afterwards. The stand-in refuses to apply the change on
+        # 127.0.0.11, which is how a camera that accepts the write and keeps its old value looks
+        # from outside.
         cls.session = ImportRun({"127.0.0.10": "Cam A renamed", "127.0.0.11": "Cam B renamed", "127.0.2.7": "Cam C"},
-                                ["n", "Test Site"], plan_extra={"ignore_import": ["127.0.0.11"]})
+                                ["n", "Test Site"], plan_extra={"ignore_import": ["127.0.0.11"]},
+                                cells={"127.0.0.10": {"Hostname": "cam-a"}})
 
     @classmethod
     def tearDownClass(cls):
@@ -185,13 +199,13 @@ class ImportAppliesTest(unittest.TestCase):
     def test_logs_say_what_was_intended_and_what_did_not_take(self):
         log = self.session.text("import.log")
         self.assertIn("Rollback    : exported now, one CCT run per group", log)
-        self.assertIn("Compared    : 0 cameras in the file not in the rollback; 2 settings on 2 cameras to change", log)
+        self.assertIn("Compared    : 0 cameras in the file not in the rollback; 3 settings on 2 cameras to change", log)
         self.assertIn("Written to  : 2 cameras in 1 CCT runs, 1 runs to prove it - no other camera logged into", log)
         self.assertIn("After       : 1 settings did not take, 0 cameras not reached, 0 CCT runs failed", log)
         self.assertIn("Result      : PARTIAL - 1 settings did not take and 0 CCT runs failed", log)
         self.assertNotIn("pw", log.split("Username")[1].split("\n")[0])
         report = self.session.text("camera.log")
-        self.assertIn("Intended changes   : 2 settings on 2 cameras", report)
+        self.assertIn("Intended changes   : 3 settings on 2 cameras", report)
         self.assertIn("Written to         : 2 cameras in 1 CCT runs - no other camera was logged into", report)
         self.assertIn("DID NOT TAKE - still different after the import:", report)
         self.assertIn("Name", report.split("DID NOT TAKE")[1].split("\n")[1])
@@ -210,7 +224,7 @@ class ImportAppliesTest(unittest.TestCase):
         self.assertIn("Rollback         : exported now", out)
         self.assertIn("Rollback             : exported just now", out)
         self.assertIn("Answered just now    : 3 of the 3 cameras in the file", out)
-        self.assertIn("Settings to change   : 2   (Name 2)", out)
+        self.assertIn("Settings to change   : 3   (Hostname 1, Name 2)", out)
         self.assertIn("Cameras to change    : 2   (every other camera is left alone", out)
         self.assertIn("CCT runs             : 1 to import, 1 to prove it - roughly 30 s in all\n    127.0.0.10-127.0.0.11\n", out)
         self.assertIn("Type the site name exactly as above", out)
@@ -232,7 +246,7 @@ class OnlyTheChangedCamerasTest(unittest.TestCase):
             self.assertEqual(run.imports, ["127.0.0.10 settings.csv edited=1", "127.0.0.12-127.0.0.13 settings.csv edited=2"])
             self.assertEqual(run.device_names("settings.csv"), ['"A2"', '"C2"', '"D2"'])
             self.assertEqual([run.state["cameras"][ip]["name"] for ip in ordered(self.SITE)], ["A2", "Cam B", "C2", "D2", "Cam E"])
-            self.assertIn("CCT runs             : 2 to import, 2 to prove it - roughly 60 s in all\n"
+            self.assertIn("CCT runs             : 2 to import - roughly 30 s in all\n"
                           "    127.0.0.10\n    127.0.0.12-127.0.0.13\n", run.result.stdout)
             self.assertIn("IMPORT  -  run 2 of 2  -  127.0.0.12-127.0.0.13", run.result.stdout)
         finally:
@@ -255,7 +269,8 @@ class RollbackGivenTest(unittest.TestCase):
             self.assertEqual(run.state["cameras"]["127.0.0.10"]["name"], "Cam A renamed")
             self.assertIn("Rollback    : from the file " + run.rollback, run.text("import.log"))
             self.assertNotIn("Rollback export, one run per subnet", run.text("camera.log"))
-            self.assertIn("SUCCESS - every change in the file is now on the cameras: 1 settings on 1 cameras", run.text("import.log"))
+            self.assertIn("SUCCESS - CCT applied 1 settings on 1 cameras. Names and places are not read back",
+                          run.text("import.log"))
         finally:
             run.close()
 
@@ -300,6 +315,48 @@ class RollbackGivenTest(unittest.TestCase):
             self.assertIn("    Ghost (127.0.1.99)", run.result.stdout)
             self.assertIn("Result      : STOPPED - 1 cameras in the file are not in the rollback file", run.text("import.log"))
             self.assertEqual(run.state["cameras"]["127.0.0.10"]["name"], "Cam A")
+        finally:
+            run.close()
+
+
+class ProofExportTest(unittest.TestCase):
+    """Only what can quietly go wrong is read back."""
+
+    SITE = {"127.0.0.10": "Cam A", "127.0.0.11": "Cam B", "127.0.0.12": "Cam C"}
+
+    def test_a_rename_finishes_in_one_run(self):
+        run = ImportRun({"127.0.0.10": "Cam A renamed"}, ["n", "Test Site"],
+                        plan_extra={"cameras": self.SITE}, readable={}, rollback="cct")
+        try:
+            self.assertEqual(run.result.returncode, 0, run.result.stdout + run.result.stderr)
+            out = run.result.stdout
+            self.assertIn("Read back after      : no - the file changes nothing but names and places", out)
+            self.assertNotIn("after export", out)
+            self.assertNotIn("after.csv", run.entries)
+            self.assertIn("SUCCESS - CCT applied 1 settings on 1 cameras. Names and places are not read back",
+                          run.text("import.log"))
+            report = run.text("camera.log")
+            self.assertIn("Read back after    : no - the file changed nothing but names and places", report)
+            self.assertIn("No proof export.", report)
+        finally:
+            run.close()
+
+    def test_anything_that_changes_how_a_camera_works_is_read_back(self):
+        run = ImportRun({"127.0.0.10": "Cam A"}, ["n", "Test Site"], plan_extra={"cameras": self.SITE},
+                        readable={"Hostname": "cam-a-renamed"}, rollback="cct")
+        try:
+            out = run.result.stdout
+            self.assertIn("to prove it", out)
+            self.assertIn("after export", out)
+            self.assertIn("after.csv", run.entries)
+        finally:
+            run.close()
+
+    def test_a_password_is_read_back_too(self):
+        run = ImportRun({"127.0.0.10": "Cam A"}, ["n", "Test Site", "ROTATE"], password="Test!!2026")
+        try:
+            self.assertIn("to prove it", run.result.stdout)
+            self.assertIn("after.csv", run.entries)
         finally:
             run.close()
 
@@ -392,7 +449,7 @@ class ReadableFileTest(unittest.TestCase):
             self.assertIn("Format           : readable settings.csv, one row per camera", run.result.stdout)
             self.assertEqual(run.imports, ["127.0.0.10 settings.csv edited=1"])
             self.assertEqual(run.state["cameras"]["127.0.0.10"]["name"], "Cam A renamed")
-            self.assertIn("SUCCESS - every change in the file is now on the cameras: 1 settings on 1 cameras",
+            self.assertIn("SUCCESS - CCT applied 1 settings on 1 cameras. Names and places are not read back",
                           run.text("import.log"))
             self.assertIn("edited-analytics.csv", run.entries)
             settings = utf16_lines(run.unpacked / "settings.csv")
@@ -424,7 +481,8 @@ class ReadableFileTest(unittest.TestCase):
             # The row CCT was given is the rollback's own with the name applied: DHCPEnabled untouched.
             given = [ln for ln in utf16_lines(run.unpacked / "settings.csv") if ln.startswith("Device\t")]
             self.assertEqual(given[0].split("\t")[8], "False")
-            self.assertIn("SUCCESS - every readable change is on the cameras: 1 settings on 1 cameras", run.text("import.log"))
+            self.assertIn("SUCCESS - CCT applied 1 settings on 1 cameras, unreadable cells left as they were. "
+                          "Names and places are not read back", run.text("import.log"))
             self.assertIn("Left as they were: 1 cells the columns could not read - nothing was written for them. camera.log names each",
                           run.result.stdout)
             self.assertIn("Compared    : 0 cameras in the file not in the rollback; 1 settings on 1 cameras to change; 1 cells left as they were",

@@ -54,6 +54,13 @@ MUTATIONS = (
              'set "PHASE=after"\r\nset "PHASETOTAL=%AFTERRUNS%"\r\nset "RUNNO=0"\r\npushd "%STAGE%"\r\n'
              'for /f "usebackq tokens=1,2" %%A in ("runlist-after.txt") do call :export_range %%A %%B\r\npopd\r\n'),
     Mutation("import.bat", "CAMERA_SETTINGS_IMPORT_BAT", IMPORT_TESTS,
+             "anything that changes how a camera works is read back",
+             "if ($a[1] -ge 0 -or $cosmetic -notcontains $a[0]) { $prove = 1 }", "if ($false) { $prove = 1 }"),
+    Mutation("import.bat", "CAMERA_SETTINGS_IMPORT_BAT", IMPORT_TESTS,
+             "a names-and-places job finishes in one run",
+             "    $prove = 0\r\n    foreach ($mac in $applied.Keys) {",
+             "    $prove = 1\r\n    foreach ($mac in $applied.Keys) {"),
+    Mutation("import.bat", "CAMERA_SETTINGS_IMPORT_BAT", IMPORT_TESTS,
              "the narrowing - CCT is handed only the cameras that change",
              "if ($narrow.Order.Count -gt 0) { Write-Native $narrow (Join-Path $out 'settings.csv') }",
              "Write-Native $wanted (Join-Path $out 'settings.csv')"),

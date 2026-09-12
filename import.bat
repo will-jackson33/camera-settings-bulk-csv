@@ -15,7 +15,7 @@ rem PowerShell blocks live after the final exit /b and are read out of this file
 setlocal
 rem One number in three places - here, in "export.bat" and in camerasettings_main.py -
 rem and tests/check_bat.py refuses a mismatch. Bumped on every edit, with its CHANGELOG entry.
-set "VERSION=1.0.5"
+set "VERSION=1.0.6"
 title Camera Configuration Tool - Settings Import %VERSION%
 color 07
 
@@ -132,6 +132,7 @@ set "MISSING=0"
 set "CHANGES=0"
 set "CHANGED=0"
 set "BAD=0"
+set "PROVE=1"
 set "RUNS=0"
 set "AFTERRUNS=0"
 set "REMAINING=0"
@@ -167,9 +168,9 @@ popd
 rem Gate 2 - the rollback against the file. A camera in the file that is not in the rollback is a
 rem stop: importing around it would leave one camera unproven. A cell the column cannot read is
 rem left as it is on the camera and named in the plan; the rest goes ahead. Returns
-rem "missing|changes|cameras|skipped|runs|afterruns".
+rem "missing|changes|cameras|skipped|runs|afterruns|prove".
 set "PSMODE=rollback"
-for /f "usebackq tokens=1,2,3,4,5,6 delims=|" %%A in (`powershell -NoProfile -Command "$t=[IO.File]::ReadAllText($env:PSSELF);$a='###PS'+'CHECK###';$i=$t.IndexOf($a)+$a.Length;$j=$t.IndexOf('###END'+'CHECK###');Invoke-Expression $t.Substring($i,$j-$i)"`) do set "MISSING=%%A" & set "CHANGES=%%B" & set "CHANGED=%%C" & set "BAD=%%D" & set "RUNS=%%E" & set "AFTERRUNS=%%F"
+for /f "usebackq tokens=1,2,3,4,5,6,7 delims=|" %%A in (`powershell -NoProfile -Command "$t=[IO.File]::ReadAllText($env:PSSELF);$a='###PS'+'CHECK###';$i=$t.IndexOf($a)+$a.Length;$j=$t.IndexOf('###END'+'CHECK###');Invoke-Expression $t.Substring($i,$j-$i)"`) do set "MISSING=%%A" & set "CHANGES=%%B" & set "CHANGED=%%C" & set "BAD=%%D" & set "RUNS=%%E" & set "AFTERRUNS=%%F" & set "PROVE=%%G"
 echo.
 echo %TTL%%RULE%%RST%
 echo %PAD%  %TTL%What this import will change%RST%
@@ -249,7 +250,9 @@ pushd "%STAGE%"
 for /f "usebackq tokens=1,2" %%A in ("runlist.txt") do call :import_range %%A %%B
 popd
 
-rem Gate 6 - the proof: the same cameras read back and held against what CCT was given.
+rem Gate 6 - the proof: the same cameras read back and held against what CCT was given. Skipped
+rem when the file changed nothing but Name and Location - see the CHECK block for why.
+if "%PROVE%"=="0" goto no_proof
 set "PHASE=after"
 set "PHASETOTAL=%AFTERRUNS%"
 set "RUNNO=0"
@@ -257,8 +260,10 @@ pushd "%STAGE%"
 for /f "usebackq tokens=1,2" %%A in ("runlist-after.txt") do call :export_range %%A %%B
 popd
 
+:no_proof
 set "PSRPT=%RPT%"
 set "PSMODE=after"
+if "%PROVE%"=="0" set "PSMODE=trust"
 for /f "usebackq tokens=1,2,3 delims=|" %%A in (`powershell -NoProfile -Command "$t=[IO.File]::ReadAllText($env:PSSELF);$a='###PS'+'CHECK###';$i=$t.IndexOf($a)+$a.Length;$j=$t.IndexOf('###END'+'CHECK###');Invoke-Expression $t.Substring($i,$j-$i)"`) do set "NOTREACHED=%%A" & set "REMAINING=%%B" & set "FAILEDRUNS=%%C"
 
 rem A cell the column could not read was left as it is on the camera and said so in the plan;
@@ -271,6 +276,8 @@ if not "%NOTREACHED%"=="0" goto verdict_done
 set "RC=0"
 set "VERDICT=SUCCESS - every change in the file is now on the cameras: %CHANGES% settings on %CHANGED% cameras"
 if not "%BAD%"=="0" set "VERDICT=SUCCESS - every readable change is on the cameras: %CHANGES% settings on %CHANGED% cameras"
+if "%PROVE%"=="0" set "VERDICT=SUCCESS - CCT applied %CHANGES% settings on %CHANGED% cameras. Names and places are not read back"
+if "%PROVE%"=="0" if not "%BAD%"=="0" set "VERDICT=SUCCESS - CCT applied %CHANGES% settings on %CHANGED% cameras, unreadable cells left as they were. Names and places are not read back"
 :verdict_done
 goto write_log
 
@@ -299,7 +306,7 @@ set "VERDICT=STOPPED at the confirmation. Nothing was changed"
 set "CAMPASS="
 rem A stop leaves the per-subnet folders and the scratch files behind; the merged rollback is
 rem the one worth keeping. On the full path the report writer has already cleared them.
-del /q "%STAGE%\runlist.txt" "%STAGE%\runlist-rollback.txt" "%STAGE%\runlist-after.txt" "%STAGE%\runs-rollback.txt" "%STAGE%\runs-import.txt" "%STAGE%\runs-after.txt" "%STAGE%\plan.txt" "%STAGE%\plan-detail.txt" "%STAGE%\plan-skipped.txt" 2>nul
+del /q "%STAGE%\plan-dhcp.txt" "%STAGE%\runlist.txt" "%STAGE%\runlist-rollback.txt" "%STAGE%\runlist-after.txt" "%STAGE%\runs-rollback.txt" "%STAGE%\runs-import.txt" "%STAGE%\runs-after.txt" "%STAGE%\plan.txt" "%STAGE%\plan-detail.txt" "%STAGE%\plan-skipped.txt" 2>nul
 rmdir /s /q "%STAGE%\rollback-parts" 2>nul
 rmdir /s /q "%STAGE%\after-parts" 2>nul
 
@@ -337,8 +344,8 @@ if not exist "%ZIP%" echo   ZIP FAILED - send this folder instead : %STAGE%
 echo.
 echo   Inside the zip: rollback - every camera as it was, the file to restore from;
 echo   settings.csv - what CCT was given; edited.csv - the file exactly as it was dropped here;
-echo   after.csv - every camera as it is now; changes.csv - the change list, one row per
-echo   setting; camera.log; console.log; import.log.
+if not "%PROVE%"=="0" echo   after.csv - the changed cameras as they are now;
+echo   changes.csv - the change list, one row per setting; camera.log; console.log; import.log.
 if "%RC%"=="0" goto report_end
 echo.
 if "%RC%"=="3" goto advice_stopped
@@ -997,7 +1004,7 @@ Write-Output ('' + $file.Order.Count + '|' + $sorted.Count + '|' + $passwords + 
 # PSMODE=rollback: the rollback - the file named in ROLLBACK, or the fresh export merged from
 # rollback-parts\*.csv - held against the file to import. Writes plan.txt for the screen, changes.csv,
 # settings.csv holding only the cameras that change with only their changed cells applied over
-# the rollback's own rows, and the CCT run lists; returns "missing|changes|cameras|bad|runs|afterruns".
+# the rollback's own rows, and the CCT run lists; returns "missing|changes|cameras|bad|runs|afterruns|prove".
 # PSMODE=after: merge after-parts\*.csv, hold it against what CCT was given, write camera.log, and
 # return "notreached|remaining|failedruns".
 $ErrorActionPreference = 'SilentlyContinue'
@@ -1010,8 +1017,11 @@ function Read-Lines([string]$name) { $p = Join-Path $out $name; if (Test-Path $p
 
 # The rollback carries no extension, like the export's backup file: a double-click asks what to
 # open it with rather than handing the one file that puts a site back to Excel.
+$proving = ($mode -ne 'trust')
 $mergedPath = Join-Path $out $(if ($mode -eq 'rollback') { 'rollback' } else { 'after.csv' })
-if ($mode -eq 'rollback' -and $given -ne '') {
+if (-not $proving) {
+    $actual = $null
+} elseif ($mode -eq 'rollback' -and $given -ne '') {
     # The rollback came as a file. Whatever shape it arrived in, rollback in the zip is CCT's
     # own shape, so importing it still puts the site back.
     $actual = Read-Any $given
@@ -1057,7 +1067,7 @@ function Change([string]$label, [string]$column, [string]$head, [string]$old, [s
     $out += "      to    '" + $new + "'"
     return $out
 }
-foreach ($mac in $wanted.Order) {
+foreach ($mac in $(if ($proving) { $wanted.Order } else { @() })) {
     $camera = $wanted.Cameras[$mac]
     if ($null -eq $actual -or -not $actual.Cameras.ContainsKey($mac)) { $missing += (Label $wanted $camera); continue }
     $other = $actual.Cameras[$mac]
@@ -1207,6 +1217,24 @@ if ($mode -eq 'rollback') {
             } else { $plainNow += $n }
         }
     }
+    # Whether the cameras get read back afterwards. A job that changes nothing but the name and
+    # the place cannot quietly go wrong in a way that matters, and a rename that did not take is
+    # visible in the Control Center anyway. Anything that changes how a camera WORKS is read back,
+    # because CCT's reply says what it sent and not what the camera kept: at the second live site
+    # it reported a camera edited while that camera had quietly gone back to DHCP for its time.
+    $cosmetic = @('Name', 'Location')
+    $prove = 0
+    foreach ($mac in $applied.Keys) {
+        foreach ($a in $applied[$mac]) {
+            if ($a[1] -ge 0 -or $cosmetic -notcontains $a[0]) { $prove = 1 }
+        }
+    }
+    $toDhcp = @()
+    foreach ($mac in $wanted.Order) {
+        if ($moving.ContainsKey($mac) -and $moving[$mac].To -eq '') { $toDhcp += (Label $actual $actual.Cameras[$mac]) }
+    }
+    Set-Content -Path (Join-Path $out 'plan-dhcp.txt') -Value $toDhcp -Encoding Default
+
     $avoidPlain = $avoid.Clone()
     foreach ($n in $moveNow) { $avoidPlain[[long]$n] = $true }
     $avoidMove = $avoid.Clone()
@@ -1232,8 +1260,15 @@ if ($mode -eq 'rollback') {
     $plan += '  Cameras to change    : ' + $changedCameras.Count + '   (every other camera is left alone - not written to, not logged into)'
     # The runs are only worth reading when the import will go ahead.
     if ($importRuns.Count -gt 0 -and $missing.Count -eq 0) {
-        $seconds = 15 * ($importRuns.Count + $afterRuns.Count)
-        $plan += '  CCT runs             : ' + $importRuns.Count + ' to import, ' + $afterRuns.Count + ' to prove it - roughly ' + $(if ($seconds -lt 120) { '' + $seconds + ' s' } else { '' + [Math]::Ceiling($seconds / 60) + ' min' }) + ' in all'
+        $runCount = $importRuns.Count
+        if ($prove -eq 1) { $runCount += $afterRuns.Count }
+        $seconds = 15 * $runCount
+        $roughly = ' - roughly ' + $(if ($seconds -lt 120) { '' + $seconds + ' s' } else { '' + [Math]::Ceiling($seconds / 60) + ' min' }) + ' in all'
+        if ($prove -eq 1) {
+            $plan += '  CCT runs             : ' + $importRuns.Count + ' to import, ' + $afterRuns.Count + ' to prove it' + $roughly
+        } else {
+            $plan += '  CCT runs             : ' + $importRuns.Count + ' to import' + $roughly
+        }
         $shown = 0
         foreach ($r in $importRuns) {
             $shown++
@@ -1241,6 +1276,7 @@ if ($mode -eq 'rollback') {
             $p = $r -split ' '
             $plan += ('    ' + $(if ($p[0] -eq $p[1]) { $p[0] } else { $p[0] + '-' + $p[1] }))
         }
+        if ($prove -eq 0) { $plan += '  Read back after      : no - the file changes nothing but names and places' }
     }
     if ($missing.Count -gt 0) {
         $plan += ''
@@ -1287,7 +1323,7 @@ if ($mode -eq 'rollback') {
     if ($rows.Count -gt 0) {
         $rows | Export-Csv -Path (Join-Path $out 'changes.csv') -NoTypeInformation -Encoding UTF8
     }
-    Write-Output ('' + $missing.Count + '|' + $total + '|' + $changedCameras.Count + '|' + $badCount + '|' + $importRuns.Count + '|' + $afterRuns.Count)
+    Write-Output ('' + $missing.Count + '|' + $total + '|' + $changedCameras.Count + '|' + $badCount + '|' + $importRuns.Count + '|' + $afterRuns.Count + '|' + $prove)
     exit 0
 }
 
@@ -1342,8 +1378,12 @@ $r += 'Cameras in file    : ' + $env:CAMERAS
 $r += 'Rollback           : ' + $(if ($given -ne '') { 'from the file ' + $given } else { 'exported now, in ' + $env:ROLLRUNS + ' CCT runs' })
 $r += 'Intended changes   : ' + $env:CHANGES + ' settings on ' + $env:CHANGED + ' cameras'
 $r += 'Written to         : ' + $wanted.Order.Count + ' cameras in ' + (Read-Lines 'runlist.txt').Count + ' CCT runs - no other camera was logged into'
-$r += 'Not reached after  : ' + $missing.Count
-$r += 'Did not take       : ' + $total + $(if ($total) { '   (' + $perColumn + ')' } else { '' })
+if ($proving) {
+    $r += 'Not reached after  : ' + $missing.Count
+    $r += 'Did not take       : ' + $total + $(if ($total) { '   (' + $perColumn + ')' } else { '' })
+} else {
+    $r += 'Read back after    : no - the file changed nothing but names and places'
+}
 $r += 'Left as they were  : ' + $env:BAD + ' cells the file held a value the column cannot read'
 $r += 'CCT runs failed    : ' + $failed
 $r += ''
@@ -1355,12 +1395,25 @@ if ($given -eq '') {
 $r += 'Import, one run per group of neighbouring changed cameras:'
 $r += Table 'runlist.txt' 'runs-import.txt'
 $r += ''
-$r += 'Proof export, the same cameras read back:'
-$r += Table 'runlist-after.txt' 'runs-after.txt'
+if ($proving) {
+    $r += 'Proof export, the same cameras read back:'
+    $r += Table 'runlist-after.txt' 'runs-after.txt'
+} else {
+    $r += 'No proof export. This file changed nothing but Name and Location, which cannot quietly go'
+    $r += 'wrong in a way that matters - and a name that did not take is visible in the Control Center.'
+    $r += 'Anything touching how a camera works is read back; this did not.'
+}
 $r += ''
 if ($missing.Count -gt 0) {
     $r += 'NOT REACHED in the proof export - their state is unknown:'
     foreach ($m in $missing) { $r += ('  ' + $m) }
+    $dhcpNotes = Read-Lines 'plan-dhcp.txt'
+    if ($dhcpNotes.Count -gt 0) {
+        $r += ''
+        $r += 'A camera handed to DHCP has an address nobody knows yet, so it cannot be read back at the'
+        $r += 'old one. These were handed to DHCP on purpose, and are not a fault:'
+        foreach ($d in $dhcpNotes) { $r += ('  ' + $d) }
+    }
     $r += ''
 }
 if ($detail.Count -gt 0) {

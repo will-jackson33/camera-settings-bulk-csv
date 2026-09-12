@@ -8,6 +8,15 @@ below.
 
 ## 1.0.x — in progress
 
+- **1.0.6** A job that changes nothing but `Name` and `Location` now finishes in **one** CCT run:
+  the cameras are not read back, because a name cannot quietly go wrong in a way that matters and
+  a rename that did not take is visible in the Control Center anyway. Anything touching how a
+  camera works - network, video, analytics, time, passwords - is still read back, because CCT's
+  reply says what it sent and not what the camera kept. The plan says which of the two you are
+  getting - `Read back after` - before you commit, and the verdict says it again at the end. A
+  camera handed to DHCP is also named in `camera.log` as not readable back on purpose, rather than
+  appearing as a fault.
+
 - **1.0.5** Switching a camera from a fixed address to DHCP is covered by a test: the address
   columns go out blank, the camera is written last like any other network change, and the plan
   says the address will come from DHCP.

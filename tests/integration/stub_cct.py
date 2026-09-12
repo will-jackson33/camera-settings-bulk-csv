@@ -21,10 +21,11 @@ import json
 import os
 import sys
 
-HEADER = ("DeviceHeader\tMacAddress\tName\tLocation\tSerialNumber\tFirmwareVersion\tModel\tManufacturer"
-          "\tDHCPEnabled\tUseHttps\tPorts\tIpAddress\tSubnetMask\tDefaultGateway\tHostname"
-          "\tAdminUserName\tAdminPassword",
-          "AnalyticsHeader\tMacAddress\tAnalyticsEnabled")
+HEADER: tuple[str, str] = (
+    "DeviceHeader\tMacAddress\tName\tLocation\tSerialNumber\tFirmwareVersion\tModel\tManufacturer"
+    "\tDHCPEnabled\tUseHttps\tPorts\tIpAddress\tSubnetMask\tDefaultGateway\tHostname"
+    "\tAdminUserName\tAdminPassword",
+    "AnalyticsHeader\tMacAddress\tAnalyticsEnabled")
 
 
 def device_rows(n: int, ip: str, name: str) -> list[str]:

@@ -117,8 +117,9 @@ Send the folder - `settings.csv` and the backup file at least - back to site.
 
        Settings to change   : 2   (Name 2)
        Cameras to change    : 2   (every other camera is left alone - not written to, not logged into)
-       CCT runs             : 1 to import, 1 to prove it - roughly 30 s in all
+       CCT runs             : 1 to import - roughly 15 s in all
          192.168.1.161-192.168.1.162
+       Read back after      : no - the file changes nothing but names and places
 
          C1515 (192.168.1.161)   Name
              from  'acc/C1515 - Front Entry'
@@ -127,6 +128,11 @@ Send the folder - `settings.csv` and the backup file at least - back to site.
    Only the cameras listed are touched. If a cell could not be read it is listed under **LEFT AS THEY ARE**, with
    the reason, and that camera keeps what it has for that setting. Anything changing address is
    listed under **NETWORK CHANGES**, with its old and new address, and is written last.
+
+   **Read back after** is how long it will take. A file that only renames cameras and changes their
+   location is done in one run - a name that did not take is plain to see in the Control Center.
+   A file that changes anything else says `1 to import, 1 to prove it`, and the cameras are read
+   back afterwards so the log can tell you what actually stuck.
 4. **Two questions.** `Write this change list to a CSV beside the script? [y/N]` - y gives you a
    file to keep or forward; the list is in the zip either way. Then:
 
@@ -134,11 +140,12 @@ Send the folder - `settings.csv` and the backup file at least - back to site.
 
    Enter stops with nothing changed. If the file sets passwords, a second word - ROTATE - is asked
    for as well.
-5. Wait. One short run per group of changed cameras, then the same cameras are read back
-   to prove it. Two cameras take well under a minute.
+5. Wait. One short run per group of changed cameras, then - unless the file only renamed them -
+   the same cameras are read back to prove it. Two cameras take well under a minute.
 6. Read the verdict:
 
-       SUCCESS       every change in the file is now on the cameras
+       SUCCESS       every change in the file is now on the cameras. On a file that only renamed
+                     them it says CCT applied them, and that names and places are not read back
        PARTIAL       something did not take - camera.log in the zip names it. Run again with the same
                      file; it changes only what still differs
        NOTHING TO DO the cameras already hold everything in the file
@@ -152,7 +159,7 @@ Send the folder - `settings.csv` and the backup file at least - back to site.
                       extension, like the backup file - do not open it in Excel
     settings.csv      what the Motorola tool was given - only the cameras that changed
     edited.csv        your file, exactly as you dropped it
-    after.csv         the changed cameras as they are now
+    after.csv         the changed cameras as they are now - only when they were read back
     changes.csv       the change list, one row per setting
     camera.log        what was intended, what did not take, one table per phase
     console.log       the Motorola tool's own output
