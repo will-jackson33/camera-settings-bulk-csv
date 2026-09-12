@@ -8,6 +8,9 @@ below.
 
 ## 1.0.x — in progress
 
+- **1.0.4** Compiled Python left over from a test run was being tracked. Removed, and the repository
+  now holds only what a person wrote.
+
 - **1.0.3** Changing a camera's address in `settings.csv` now means what you would expect: the
   camera is given that address **statically**, with its mask and gateway carried over unless you
   changed those too. It used to send the new address with DHCP still switched on, which CCT
