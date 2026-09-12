@@ -15,7 +15,7 @@ rem PowerShell blocks live after the final exit /b and are read out of this file
 setlocal
 rem One number in three places - here, in "export.bat" and in camerasettings_main.py -
 rem and tests/check_bat.py refuses a mismatch. Bumped on every edit, with its CHANGELOG entry.
-set "VERSION=1.0.1"
+set "VERSION=1.0.2"
 title Camera Configuration Tool - Settings Import %VERSION%
 color 07
 
@@ -42,6 +42,7 @@ set "PSSELF=%~f0"
 set "PSPW=%PW%"
 set "PSRW=%RW%"
 set "DROPFILE=%TEMP%\camera-import-drop.txt"
+set "DROPPATH="
 
 cls
 echo.
@@ -49,14 +50,19 @@ echo   starting ...
 
 if not exist "%CCT%" goto no_cct
 
-rem A dropped file arrives as %1 and has to survive the elevation relaunch. It goes through a temp
-rem file, never on the relaunch command line: a path holding a space or a quote cannot be passed
-rem through Start-Process -ArgumentList without being mangled, and the answers already travel this
-rem way. If elevation switches to another user account the file is not found and the form simply
-rem asks for the path.
+rem A dropped file arrives as %1 and has to survive the elevation relaunch, so it travels twice:
+rem as %2 on the relaunch itself, and through a temp file. A Windows path can never contain a
+rem quote, so wrapping it in one is always safe, and the path is built inside PowerShell from the
+rem environment rather than typed into the command text. The temp file alone was not enough - it
+rem is written before elevation and read after, and the two do not always share a %TEMP%.
 if "%~1"=="" goto elevation_check
-if /i "%~1"=="--elevated" goto elevation_check
+if /i "%~1"=="--elevated" goto relaunched
+set "DROPPATH=%~1"
 > "%DROPFILE%" echo %~1
+goto elevation_check
+
+:relaunched
+if not "%~2"=="" set "DROPPATH=%~2"
 
 :elevation_check
 net session >nul 2>&1
@@ -66,7 +72,7 @@ call :paint_banner
 echo.
 echo   Windows will now ask for administrator permission - answer Yes.
 echo   This window closes and the import continues in a new one.
-powershell -NoProfile -Command "try{Start-Process -FilePath $env:PSSELF -ArgumentList '--elevated' -Verb RunAs -ErrorAction Stop; exit 0}catch{exit 1}"
+powershell -NoProfile -Command "$q=[char]34;$a='--elevated';if($env:DROPPATH){$a=$a+' '+$q+$env:DROPPATH+$q};try{Start-Process -FilePath $env:PSSELF -ArgumentList $a -Verb RunAs -ErrorAction Stop; exit 0}catch{exit 1}"
 if errorlevel 1 goto uac_declined
 endlocal
 exit /b 0
@@ -563,8 +569,11 @@ $vtOn
 $ErrorActionPreference = 'Stop'
 $t=[IO.File]::ReadAllText($env:PSSELF);$a='###PS'+'COLS###';$i=$t.IndexOf($a)+$a.Length;$j=$t.IndexOf('###END'+'COLS###');Invoke-Expression $t.Substring($i,$j-$i)
 $t=[IO.File]::ReadAllText($env:PSSELF);$a='###PS'+'CSV###';$i=$t.IndexOf($a)+$a.Length;$j=$t.IndexOf('###END'+'CSV###');Invoke-Expression $t.Substring($i,$j-$i)
-$dropped = ''
-try { if (Test-Path -LiteralPath $env:DROPFILE) { $dropped = ([IO.File]::ReadAllLines($env:DROPFILE) | Where-Object { $_ -ne '' } | Select-Object -First 1) } } catch {}
+# The dropped path, from the relaunch argument first and the temp file second.
+$dropped = '' + $env:DROPPATH
+if ($dropped.Trim() -eq '') {
+    try { if (Test-Path -LiteralPath $env:DROPFILE) { $dropped = ([IO.File]::ReadAllLines($env:DROPFILE) | Where-Object { $_ -ne '' } | Select-Object -First 1) } } catch {}
+}
 if ($null -eq $dropped) { $dropped = '' }
 function Test-SettingsFile([string]$path) { try { return ($null -ne (Read-Any $path)) } catch { return $false } }
 

@@ -8,6 +8,10 @@ below.
 
 ## 1.0.x — in progress
 
+- **1.0.2** A file dropped onto `import.bat` now survives the administrator prompt. It rode a
+  file in `%TEMP%`, which the elevated half of the run cannot always see; it now rides the
+  relaunch itself as well.
+
 - **1.0.1** The two scripts are `export.bat` and `import.bat`. They were `1 export settings.bat`
   and `2 import settings.bat`, so a shortcut or a note naming the old files will not find them.
 

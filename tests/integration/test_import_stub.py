@@ -61,7 +61,7 @@ class ImportRun:
     """
 
     def __init__(self, names: dict[str, str], typed: list[str], plan_extra: dict | None = None, password: str = "",
-                 readable: dict[str, str] | None = None, rollback: str | None = None):
+                 readable: dict[str, str] | None = None, rollback: str | None = None, drop: bool = False):
         self.tmp = tempfile.TemporaryDirectory()
         work = Path(self.tmp.name)
         (work / "appdata" / CCT_LOG_DIR).mkdir(parents=True)
@@ -93,8 +93,12 @@ class ImportRun:
                 write_readable_pair(Path(self.rollback), current)
         env = {"TEMP": str(work / "temp"), "TMP": str(work / "temp"), "LOCALAPPDATA": str(work / "appdata"),
                "CCT_STUB_PLAN": str(self.stub.parent / "plan.json")}
-        answers = ["Test Site", str(self.csv), self.rollback, "admin", "pw", "18099", "18098"] + typed
-        self.result = run_script(self.script, answers, env, timeout=300)
+        # drop=True hands the file over the way Explorer does - as an argument - and leaves the
+        # form's file field blank, so the run only succeeds if the dropped path reached the form.
+        typed_path = "" if drop else str(self.csv)
+        answers = ["Test Site", typed_path, self.rollback, "admin", "pw", "18099", "18098"] + typed
+        self.result = run_script(self.script, answers, env, timeout=300,
+                                 args=[str(self.csv)] if drop else None)
         zips = list(work.glob("*.zip"))
         assert len(zips) == 1, (zips, self.result.stdout, self.result.stderr)
         self.zip = zips[0]
@@ -244,6 +248,16 @@ class RollbackGivenTest(unittest.TestCase):
             self.assertRegex(run.result.stdout, r"Rollback         : .*\\drop\\backup\n")
             self.assertEqual(run.imports, ["127.0.0.10 settings.csv edited=1"])
             self.assertEqual(run.device_names("rollback"), ['"Cam A"', '"Cam B"', '"Cam C"'])
+        finally:
+            run.close()
+
+    def test_a_dropped_file_reaches_the_form(self):
+        run = ImportRun({"127.0.0.10": "Cam A renamed"}, ["n", "Test Site"], readable={}, rollback="cct", drop=True)
+        try:
+            self.assertEqual(run.result.returncode, 0, run.result.stdout + run.result.stderr)
+            # Plain mode never echoes a field's default, so the proof is that the run went
+            # through on a blank answer: only the dropped path could have filled that field.
+            self.assertEqual(run.imports, ["127.0.0.10 settings.csv edited=1"])
         finally:
             run.close()
 

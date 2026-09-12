@@ -114,7 +114,8 @@ def prepare_stub(workdir: Path, plan: dict) -> Path:
     return wrapper
 
 
-def run_script(script: Path, answers: list[str], env: dict, timeout: int) -> subprocess.CompletedProcess:
+def run_script(script: Path, answers: list[str], env: dict, timeout: int,
+               args: list[str] | None = None) -> subprocess.CompletedProcess:
     """Drive the whole script with the form in its plain, redirected-input mode.
 
     The answers go in through a FILE, not a pipe. CMD's `set /p` reads a block from its input and
@@ -126,7 +127,7 @@ def run_script(script: Path, answers: list[str], env: dict, timeout: int) -> sub
     answer_file = script.parent / "answers.txt"
     answer_file.write_bytes(("\r\n".join(answers) + "\r\n").encode("cp1252"))
     with answer_file.open("rb") as stdin:
-        return subprocess.run(["cmd", "/c", str(script)], stdin=stdin, env=full,
+        return subprocess.run(["cmd", "/c", str(script), *(args or [])], stdin=stdin, env=full,
                               cwd=str(script.parent), capture_output=True, text=True, timeout=timeout,
                               encoding="cp1252", errors="replace")
 

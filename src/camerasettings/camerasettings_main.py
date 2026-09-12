@@ -22,7 +22,7 @@ import camerasettings_edit as edit
 import camerasettings_sheet as sheet
 
 # The same number the two scripts carry in their VERSION= line; tests/check_bat.py holds them together.
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 
 def camerasettings_main_freeName(path: Path) -> Path:

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FREE_TEXT = ("CCT", "SITE", "OUTDIR", "STAGE", "CSV", "LOG", "ZIP", "NAME", "BASENAME", "VERDICT",
              "STARTIP", "ENDIP", "IPRANGE", "DEFEND", "PSSRC", "PSZIP", "PSCSV", "CAMUSER",
              "SUBSTART", "SUBEND", "SUBRANGE", "SUBCSV", "PSOUT", "PSRPT", "IMPORTCSV", "PSDROP", "PHASE",
-             "PSREADABLE", "PSANALYTICS", "ROLLBACK", "BACKUP")
+             "PSREADABLE", "PSANALYTICS", "ROLLBACK", "BACKUP", "DROPPATH")
 FREE_TEXT_PATTERN = re.compile("%(" + "|".join(FREE_TEXT) + ")%")
 
 
