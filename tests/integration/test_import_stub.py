@@ -23,16 +23,19 @@ def ordered(names: dict[str, str]) -> list[str]:
     return sorted(names, key=lambda ip: tuple(int(o) for o in ip.split(".")))
 
 
-def write_import_file(path: Path, names: dict[str, str], password: str = "") -> None:
+def write_import_file(path: Path, names: dict[str, str], password: str = "", dhcp: bool = False) -> None:
     """A settings file to import, in the stand-in's own row shape, carrying the names asked for."""
     rows = list(HEADER)
     for n, ip in enumerate(ordered(names), 1):
         device, analytics = device_rows(n, ip, names[ip])
+        if dhcp:
+            device = device.replace("\tFalse\tTrue\t80;443\t", "\tTrue\tTrue\t80;443\t", 1)
         rows += [device + password, analytics]  # the row ends with the two empty credential fields
     path.write_text("\n".join(rows) + "\n", encoding="utf-16", newline="\r\n")
 
 
-def write_readable_pair(path: Path, names: dict[str, str], cells: dict[str, str] | None = None) -> None:
+def write_readable_pair(path: Path, names: dict[str, str], cells: dict[str, str] | None = None,
+                        dhcp: bool = False) -> None:
     """The same cameras as the export's readable settings.csv and analytics.csv beside it, with
     any cell overridden as a person might have typed it in Excel."""
     columns = HEADER[0].split("\t")[1:]
@@ -42,6 +45,8 @@ def write_readable_pair(path: Path, names: dict[str, str], cells: dict[str, str]
         for n, ip in enumerate(ordered(names), 1):
             values = [v.strip("\"'") for v in device_rows(n, ip, names[ip])[0].split("\t")[1:]]
             row = dict(zip(columns, values, strict=True))
+            if dhcp:
+                row["DHCPEnabled"] = "True"
             row.update(cells or {})
             writer.writerow([row[c] for c in columns])
     with path.with_name("analytics.csv").open("w", encoding="utf-8-sig", newline="") as handle:
@@ -61,7 +66,8 @@ class ImportRun:
     """
 
     def __init__(self, names: dict[str, str], typed: list[str], plan_extra: dict | None = None, password: str = "",
-                 readable: dict[str, str] | None = None, rollback: str | None = None, drop: bool = False):
+                 readable: dict[str, str] | None = None, rollback: str | None = None, drop: bool = False,
+                 dhcp: bool = False, move: tuple[str, str] | None = None):
         self.tmp = tempfile.TemporaryDirectory()
         work = Path(self.tmp.name)
         (work / "appdata" / CCT_LOG_DIR).mkdir(parents=True)
@@ -72,17 +78,26 @@ class ImportRun:
         self.script = prepare_script(work, self.stub, script=IMPORT_BAT, cct_calls=2)
         if readable is None:
             self.csv = work / "drop" / "settings.edited.csv"
-            write_import_file(self.csv, names, password)
+            write_import_file(self.csv, names, password, dhcp=dhcp)
         else:
             self.csv = work / "drop" / "settings.csv"
-            write_readable_pair(self.csv, names, readable)
+            write_readable_pair(self.csv, names, readable, dhcp=dhcp)
+            if move is not None:
+                # One camera given a new address, the way a person edits a single row in Excel.
+                rows = list(csv.reader(self.csv.read_text(encoding="utf-8-sig").splitlines()))
+                at = rows[0].index("IpAddress")
+                for row in rows[1:]:
+                    if row[at] == move[0]:
+                        row[at] = move[1]
+                with self.csv.open("w", encoding="utf-8-sig", newline="") as handle:
+                    csv.writer(handle, lineterminator="\r\n").writerows(rows)
         self.rollback = ""
         if rollback is not None:
             current = {ip: name.lstrip("!") for ip, name in plan["cameras"].items()}
             (work / "drop" / "rollback").mkdir()
             if rollback == "cct":
                 self.rollback = str(work / "drop" / "rollback" / "cct.csv")
-                write_import_file(Path(self.rollback), current)
+                write_import_file(Path(self.rollback), current, dhcp=dhcp)
             elif rollback == "beside":
                 # The export's own backup file beside the dropped file: the form offers it, and the
                 # blank answer keeps what is offered.
@@ -117,6 +132,11 @@ class ImportRun:
     def text(self, name: str) -> str:
         return (self.unpacked / name).read_text(encoding="cp1252")
 
+    def device_row(self, name: str, mac: str) -> list[str]:
+        """One camera's row out of a settings file in the zip, field by field."""
+        rows = [ln.split("\t") for ln in utf16_lines(self.unpacked / name) if ln.startswith("Device\t")]
+        return next(r for r in rows if r[1] == mac)
+
     def device_names(self, name: str) -> list[str]:
         return [ln.split("\t")[2] for ln in utf16_lines(self.unpacked / name) if ln.startswith("Device\t")]
 
@@ -150,8 +170,8 @@ class ImportAppliesTest(unittest.TestCase):
     def test_the_runs_in_order_and_only_over_the_changed_cameras(self):
         self.assertEqual(self.session.imports, ["127.0.0.10-127.0.0.11 settings.csv edited=1"])
         out = self.session.result.stdout
-        self.assertIn("rollback export  -  run 1 of 2  -  127.0.0.0-127.0.0.255", out)
-        self.assertIn("rollback export  -  run 2 of 2  -  127.0.2.0-127.0.2.255", out)
+        self.assertIn("rollback export  -  run 1 of 2  -  127.0.0.10-127.0.0.11", out)
+        self.assertIn("rollback export  -  run 2 of 2  -  127.0.2.7", out)
         self.assertLess(out.index("rollback export  -  run 2 of 2"), out.index("IMPORT  -  run 1 of 1  -  127.0.0.10-127.0.0.11"))
         self.assertLess(out.index("IMPORT  -  run 1 of 1"), out.index("after export  -  run 1 of 1  -  127.0.0.10-127.0.0.11"))
 
@@ -164,7 +184,7 @@ class ImportAppliesTest(unittest.TestCase):
 
     def test_logs_say_what_was_intended_and_what_did_not_take(self):
         log = self.session.text("import.log")
-        self.assertIn("Rollback    : exported now, one CCT run per subnet", log)
+        self.assertIn("Rollback    : exported now, one CCT run per group", log)
         self.assertIn("Compared    : 0 cameras in the file not in the rollback; 2 settings on 2 cameras to change", log)
         self.assertIn("Written to  : 2 cameras in 1 CCT runs, 1 runs to prove it - no other camera logged into", log)
         self.assertIn("After       : 1 settings did not take, 0 cameras not reached, 0 CCT runs failed", log)
@@ -175,11 +195,11 @@ class ImportAppliesTest(unittest.TestCase):
         self.assertIn("Written to         : 2 cameras in 1 CCT runs - no other camera was logged into", report)
         self.assertIn("DID NOT TAKE - still different after the import:", report)
         self.assertIn("Name", report.split("DID NOT TAKE")[1].split("\n")[1])
-        self.assertIn("  Cam B renamed (127.0.0.11)   Name\n      from  'Cam B'\n      to    'Cam B renamed'", report)
+        self.assertIn("  Cam B (127.0.0.11)   Name\n      from  'Cam B'\n      to    'Cam B renamed'", report)
         self.assertIn("INTENDED - what the file changed against the rollback:", report)
         # The stand-in answers in a second or two; only the shape of the tables is asserted.
-        self.assertRegex(report, r"Rollback export, one run per subnet in the file:\n  127\.0\.0\.0-127\.0\.0\.255 +exit 0 in \d+ s\n"
-                                 r"  127\.0\.2\.0-127\.0\.2\.255 +exit 0 in \d+ s\n")
+        self.assertRegex(report, r"Rollback export, one run per group of cameras in the file:\n  127\.0\.0\.10-127\.0\.0\.11 +exit 0 in \d+ s\n"
+                                 r"  127\.0\.2\.7 +exit 0 in \d+ s\n")
         self.assertRegex(report, r"Import, one run per group of neighbouring changed cameras:\n  127\.0\.0\.10-127\.0\.0\.11 +exit 0 in \d+ s\n")
         self.assertRegex(report, r"Proof export, the same cameras read back:\n  127\.0\.0\.10-127\.0\.0\.11 +exit 0 in \d+ s\n")
 
@@ -284,6 +304,68 @@ class RollbackGivenTest(unittest.TestCase):
             run.close()
 
 
+class NetworkChangeTest(unittest.TestCase):
+    """The four network columns, which CCT validates together and which can lose a camera."""
+
+    SITE = {"127.0.0.10": "Cam A", "127.0.0.11": "Cam B", "127.0.0.12": "Cam C"}
+    MAC_A = "00-18-85-00-00-0A"
+    MAC_C = "00-18-85-00-00-0C"
+
+    def test_a_changed_address_is_sent_as_a_static_one(self):
+        # The live case: a DHCP camera given a new address. Sending the new address with DHCP
+        # still on is what CCT refuses as IpAddressAndDHCP, and it refuses the whole file for it.
+        run = ImportRun(dict(self.SITE), ["n", ""], plan_extra={"cameras": self.SITE}, dhcp=True,
+                        readable={}, rollback="cct", move=("127.0.0.10", "127.0.0.40"))
+        try:
+            row = run.device_row("settings.csv", self.MAC_A)
+            self.assertEqual(row[8], "False", "DHCP must be switched off for a static address")
+            self.assertEqual(row[11], "127.0.0.40")
+            self.assertEqual(row[12], "255.255.255.0", "the mask has to ride along or CCT refuses it")
+            self.assertEqual(row[13], "127.0.0.1", "and the gateway")
+            self.assertIn("NETWORK CHANGES - written last, after every other camera:", run.result.stdout)
+            self.assertIn("127.0.0.10  ->  127.0.0.40   set static", run.result.stdout)
+            self.assertIn("cannot be reached by the", run.result.stdout)
+        finally:
+            run.close()
+
+    def test_an_address_that_is_not_changing_is_not_sent_at_all(self):
+        run = ImportRun({"127.0.0.10": "Cam A renamed"}, ["n", ""], plan_extra={"cameras": self.SITE},
+                        dhcp=True, readable={}, rollback="cct")
+        try:
+            row = run.device_row("settings.csv", self.MAC_A)
+            self.assertEqual(row[8], "True", "the camera stays on DHCP")
+            self.assertEqual([row[11], row[12], row[13]], ["", "", ""],
+                             "blank is the only value a drifted rollback cannot get the file refused for")
+            self.assertNotIn("NETWORK CHANGES", run.result.stdout)
+        finally:
+            run.close()
+
+    def test_a_static_camera_keeps_its_address_because_cct_requires_it(self):
+        run = ImportRun({"127.0.0.10": "Cam A renamed"}, ["n", ""], plan_extra={"cameras": self.SITE},
+                        readable={}, rollback="cct")
+        try:
+            row = run.device_row("settings.csv", self.MAC_A)
+            self.assertEqual(row[8], "False")
+            self.assertEqual([row[11], row[12], row[13]], ["127.0.0.10", "255.255.255.0", "127.0.0.1"])
+        finally:
+            run.close()
+
+    def test_the_camera_that_moves_is_written_last(self):
+        # Cam C is renamed and Cam A is moving: the rename goes first, on its own run, and the
+        # address change follows. A run never spans the other group.
+        names = dict(self.SITE)
+        names["127.0.0.12"] = "Cam C renamed"
+        run = ImportRun(names, ["n", "Test Site"], plan_extra={"cameras": self.SITE}, dhcp=True,
+                        readable={}, rollback="cct", move=("127.0.0.10", "127.0.0.40"))
+        try:
+            out = run.result.stdout
+            self.assertIn("IMPORT  -  run 1 of 2  -  127.0.0.12", out)
+            self.assertIn("IMPORT  -  run 2 of 2  -  127.0.0.10", out)
+            self.assertLess(out.index("run 1 of 2  -  127.0.0.12"), out.index("run 2 of 2  -  127.0.0.10"))
+        finally:
+            run.close()
+
+
 class ReadableFileTest(unittest.TestCase):
     """The file a person edited in Excel imports exactly as CCT's own would."""
 
@@ -318,7 +400,7 @@ class ReadableFileTest(unittest.TestCase):
             self.assertEqual(run.result.returncode, 0, run.result.stdout + run.result.stderr)
             self.assertIn("LEFT AS THEY ARE - 1 cells could not be read, so nothing is written for them and the\n"
                           "  camera keeps what it has.", run.result.stdout)
-            self.assertIn("Cam A renamed (127.0.0.10)   DHCPEnabled   'maybe'", run.result.stdout)
+            self.assertIn("Cam A (127.0.0.10)   DHCPEnabled   'maybe'", run.result.stdout)
             self.assertIn("DHCPEnabled takes True or False, not 'maybe'", run.result.stdout)
             self.assertIn("Settings to change   : 1   (Name 1)", run.result.stdout)
             self.assertEqual(run.imports, ["127.0.0.10 settings.csv edited=1"])
@@ -334,7 +416,7 @@ class ReadableFileTest(unittest.TestCase):
             report = run.text("camera.log")
             self.assertIn("Left as they were  : 1 cells the file held a value the column cannot read", report)
             self.assertIn("LEFT AS THEY WERE - cells the column could not read; nothing was written for them:\n"
-                          "  Cam A renamed (127.0.0.10)   DHCPEnabled   'maybe'\n      DHCPEnabled takes True or False, not 'maybe'\n", report)
+                          "  Cam A (127.0.0.10)   DHCPEnabled   'maybe'\n      DHCPEnabled takes True or False, not 'maybe'\n", report)
         finally:
             run.close()
 
@@ -422,7 +504,7 @@ class ConfirmationTest(unittest.TestCase):
             self.assertIn(f"Written: {changes.name}", run.result.stdout)
             rows = changes.read_text(encoding="utf-8-sig").splitlines()
             self.assertEqual(rows, ['"Camera","IpAddress","Head","Column","From","To"',
-                                    '"Cam A renamed","127.0.0.10","","Name","Cam A","Cam A renamed"'])
+                                    '"Cam A","127.0.0.10","","Name","Cam A","Cam A renamed"'])
         finally:
             run.close()
 

@@ -15,7 +15,7 @@ rem PowerShell blocks live after the final exit /b and are read out of this file
 setlocal
 rem One number in three places - here, in "export.bat" and in camerasettings_main.py -
 rem and tests/check_bat.py refuses a mismatch. Bumped on every edit, with its CHANGELOG entry.
-set "VERSION=1.0.2"
+set "VERSION=1.0.3"
 title Camera Configuration Tool - Settings Import %VERSION%
 color 07
 
@@ -120,12 +120,14 @@ mkdir "%STAGE%\after-parts" 2>nul
 mkdir "%LOCALAPPDATA%\Motorola Solutions\Camera Configuration Tool" 2>nul
 
 rem The subnets come from the file itself - the /24 of every camera's address - so there is no
-rem sweep; CCT gets one subnet at a time as the export does. Returns "cameras|subnets|passwords|format".
+rem sweep. The rollback export walks only the addresses the file names, grouped the same way the
+rem import runs are. Returns "cameras|subnets|passwords|format|rollbackruns".
 set "PSOUT=%STAGE%"
 set "CAMERAS=0"
 set "RUNCOUNT=0"
 set "PASSWORDS=0"
 set "FORMAT=none"
+set "ROLLRUNS=0"
 set "MISSING=0"
 set "CHANGES=0"
 set "CHANGED=0"
@@ -135,7 +137,7 @@ set "AFTERRUNS=0"
 set "REMAINING=0"
 set "FAILEDRUNS=0"
 set "NOTREACHED=0"
-for /f "usebackq tokens=1,2,3,4 delims=|" %%A in (`powershell -NoProfile -Command "$t=[IO.File]::ReadAllText($env:PSSELF);$a='###PS'+'PLAN###';$i=$t.IndexOf($a)+$a.Length;$j=$t.IndexOf('###END'+'PLAN###');Invoke-Expression $t.Substring($i,$j-$i)"`) do set "CAMERAS=%%A" & set "RUNCOUNT=%%B" & set "PASSWORDS=%%C" & set "FORMAT=%%D"
+for /f "usebackq tokens=1,2,3,4,5 delims=|" %%A in (`powershell -NoProfile -Command "$t=[IO.File]::ReadAllText($env:PSSELF);$a='###PS'+'PLAN###';$i=$t.IndexOf($a)+$a.Length;$j=$t.IndexOf('###END'+'PLAN###');Invoke-Expression $t.Substring($i,$j-$i)"`) do set "CAMERAS=%%A" & set "RUNCOUNT=%%B" & set "PASSWORDS=%%C" & set "FORMAT=%%D" & set "ROLLRUNS=%%E"
 if "%CAMERAS%"=="0" goto bad_file
 
 echo.
@@ -147,7 +149,7 @@ echo   File             : %IMPORTCSV%
 if "%FORMAT%"=="cct" echo   Format           : the file as CCT wrote it
 if "%FORMAT%"=="readable" echo   Format           : readable settings.csv, one row per camera
 if defined ROLLBACK echo   Rollback         : %ROLLBACK%
-if not defined ROLLBACK echo   Rollback         : exported now - every camera in the file is read first, one CCT run per subnet
+if not defined ROLLBACK echo   Rollback         : exported now - every camera in the file is read first, in %ROLLRUNS% CCT runs
 echo   Nothing changes until the plan has been read and the site name typed back.
 if not "%PASSWORDS%"=="0" echo   PASSWORDS        : this file sets %PASSWORDS% camera passwords.
 
@@ -155,7 +157,7 @@ rem Gate 1 - the rollback: the export the file came from, or a fresh export of e
 rem file names, before anything is written. rollback in the zip is the way back either way.
 if defined ROLLBACK goto rollback_given
 set "PHASE=rollback"
-set "PHASETOTAL=%RUNCOUNT%"
+set "PHASETOTAL=%ROLLRUNS%"
 set "RUNNO=0"
 pushd "%STAGE%"
 for /f "usebackq tokens=1,2" %%A in ("runlist-rollback.txt") do call :export_range %%A %%B
@@ -311,7 +313,7 @@ rmdir /s /q "%STAGE%\after-parts" 2>nul
 >> "%LOG%" echo Ports       : HTTP %HTTPPORT%, HTTPS %HTTPSPORT%
 >> "%LOG%" echo Run at      : %RUNSTART%
 if defined ROLLBACK >> "%LOG%" echo Rollback    : from the file %ROLLBACK%
-if not defined ROLLBACK >> "%LOG%" echo Rollback    : exported now, one CCT run per subnet
+if not defined ROLLBACK >> "%LOG%" echo Rollback    : exported now, one CCT run per group of cameras in the file
 >> "%LOG%" echo Compared    : %MISSING% cameras in the file not in the rollback; %CHANGES% settings on %CHANGED% cameras to change; %BAD% cells left as they were
 >> "%LOG%" echo Written to  : %CHANGED% cameras in %RUNS% CCT runs, %AFTERRUNS% runs to prove it - no other camera logged into
 >> "%LOG%" echo Passwords   : %PASSWORDS% set by the file
@@ -857,6 +859,33 @@ function Write-Native($file, [string]$path) {
     }
     [IO.File]::WriteAllLines($path, $lines, [Text.Encoding]::Unicode)
 }
+function Ip-Long([string]$v) { $o = $v -split '\.'; return [long]$o[0]*16777216 + [long]$o[1]*65536 + [long]$o[2]*256 + [long]$o[3] }
+function Long-Ip([long]$n) { return ('{0}.{1}.{2}.{3}' -f (($n -shr 24) -band 255), (($n -shr 16) -band 255), (($n -shr 8) -band 255), ($n -band 255)) }
+function Ranges($addresses, $avoid) {
+    # Addresses grouped into as few CCT runs as possible. Neighbours share a run; a run breaks at a
+    # /24 edge, wherever an address in $avoid sits between two of them - so a run never reaches a
+    # camera outside the group it was built for - and wherever the next address is more than a
+    # short reach away, because walking dead addresses costs more than starting another run.
+    $reach = 32
+    $runs = @()
+    $start = [long]-1
+    $prev = [long]-1
+    foreach ($n in @($addresses | Sort-Object -Unique)) {
+        $n = [long]$n
+        $join = $false
+        if ($start -ge 0 -and ($n - $prev) -le $reach -and [Math]::Floor($n / 256) -eq [Math]::Floor($prev / 256)) {
+            $join = $true
+            for ($x = $prev + 1; $x -lt $n; $x++) { if ($avoid.ContainsKey([long]$x)) { $join = $false; break } }
+        }
+        if (-not $join) {
+            if ($start -ge 0) { $runs += ((Long-Ip $start) + ' ' + (Long-Ip $prev)) }
+            $start = $n
+        }
+        $prev = $n
+    }
+    if ($start -ge 0) { $runs += ((Long-Ip $start) + ' ' + (Long-Ip $prev)) }
+    return $runs
+}
 function Bare([string]$v) { if ($v.Length -ge 2 -and $v[0] -eq $v[-1] -and @('"', "'") -contains $v[0]) { return $v.Substring(1, $v.Length - 2) }; return $v }
 function Field($file, $camera, [string]$column) { $i = [array]::IndexOf($file.DeviceColumns, $column); if ($i -lt 0) { return '' }; return (Bare $camera.Device[$i]) }
 function Who($file, $camera) {
@@ -946,17 +975,22 @@ Copy-Item -LiteralPath $env:IMPORTCSV -Destination (Join-Path $env:PSOUT 'edited
 $beside = Join-Path (Split-Path -Parent $env:IMPORTCSV) 'analytics.csv'
 if ($file.Format -eq 'readable' -and (Test-Path -LiteralPath $beside)) { Copy-Item -LiteralPath $beside -Destination (Join-Path $env:PSOUT 'edited-analytics.csv') -Force }
 $blocks = @{}
+$addresses = @()
 $passwords = 0
 foreach ($mac in $file.Order) {
     $camera = $file.Cameras[$mac]
     $ip = Field $file $camera 'IpAddress'
-    if ($ip -match '^(\d+)\.(\d+)\.(\d+)\.\d+$') { $blocks[('{0}.{1}.{2}' -f $matches[1], $matches[2], $matches[3])] = $true }
+    if ($ip -match '^(\d+)\.(\d+)\.(\d+)\.\d+$') {
+        $blocks[('{0}.{1}.{2}' -f $matches[1], $matches[2], $matches[3])] = $true
+        $addresses += (Ip-Long $ip)
+    }
     if ((Field $file $camera 'AdminPassword') -ne '') { $passwords++ }
     if ((Field $file $camera 'SecondaryAdminPassword') -ne '') { $passwords++ }
 }
 $sorted = @($blocks.Keys | Sort-Object { [version]($_ + '.0') })
-Set-Content -Path (Join-Path $env:PSOUT 'runlist-rollback.txt') -Value @($sorted | ForEach-Object { $_ + '.0 ' + $_ + '.255' }) -Encoding Default
-Write-Output ('' + $file.Order.Count + '|' + $sorted.Count + '|' + $passwords + '|' + $file.Format)
+$rollbackRuns = @(Ranges $addresses @{})
+Set-Content -Path (Join-Path $env:PSOUT 'runlist-rollback.txt') -Value $rollbackRuns -Encoding Default
+Write-Output ('' + $file.Order.Count + '|' + $sorted.Count + '|' + $passwords + '|' + $file.Format + '|' + $rollbackRuns.Count)
 ###ENDPLAN###
 
 ###PSCHECK###
@@ -972,8 +1006,6 @@ $t=[IO.File]::ReadAllText($env:PSSELF);$a='###PS'+'CSV###';$i=$t.IndexOf($a)+$a.
 $out = $env:PSOUT
 $mode = $env:PSMODE
 $given = ('' + $env:ROLLBACK).Trim()
-function Ip-Long([string]$v) { $o = $v -split '\.'; return [long]$o[0]*16777216 + [long]$o[1]*65536 + [long]$o[2]*256 + [long]$o[3] }
-function Long-Ip([long]$n) { return ('{0}.{1}.{2}.{3}' -f (($n -shr 24) -band 255), (($n -shr 16) -band 255), (($n -shr 8) -band 255), ($n -band 255)) }
 function Read-Lines([string]$name) { $p = Join-Path $out $name; if (Test-Path $p) { return @([IO.File]::ReadAllLines($p) | Where-Object { $_ -ne '' }) }; return @() }
 
 # The rollback carries no extension, like the export's backup file: a double-click asks what to
@@ -1029,9 +1061,11 @@ foreach ($mac in $wanted.Order) {
     $camera = $wanted.Cameras[$mac]
     if ($null -eq $actual -or -not $actual.Cameras.ContainsKey($mac)) { $missing += (Label $wanted $camera); continue }
     $other = $actual.Cameras[$mac]
-    $label = Label $wanted $camera
-    $who = Who $wanted $camera
-    $ip = Field $wanted $camera 'IpAddress'
+    # Named by the rollback, not the file: a camera that is moving is still at its old address
+    # while the plan is being read, and that is the one to look for in the Control Center.
+    $label = Label $actual $other
+    $who = Who $actual $other
+    $ip = Field $actual $other 'IpAddress'
     $applied[$mac] = @()
     for ($c = 0; $c -lt $wanted.DeviceColumns.Count; $c++) {
         $column = $wanted.DeviceColumns[$c]
@@ -1095,6 +1129,17 @@ $perColumn = ($diffs.GetEnumerator() | Sort-Object Name | ForEach-Object { $_.Na
 if ($mode -eq 'rollback') {
     # What CCT is handed: the rollback's own rows for the cameras that change, with only the
     # changed cells applied. Every other camera is left out of the file, and out of the ranges.
+    #
+    # The four network columns are decided together, because CCT validates them together and because an address is the one change that can lose a camera:
+    #   - an address typed into the file means a STATIC address. DHCP cannot be told to hand out a
+    #     chosen one, so DHCPEnabled goes to False and the mask and gateway ride along from the
+    #     rollback unless the file changed them too. A new address with DHCP still on is what CCT
+    #     refuses as IpAddressAndDHCP, and it refuses the whole file over it.
+    #   - an address that is NOT changing on a DHCP camera is sent blank, which CCT reads as leave
+    #     it alone. That is the only way a rollback that has drifted cannot have the file refused.
+    #   - a camera already on a static address keeps all three, because CCT requires them.
+    $netAddress = @('IpAddress', 'SubnetMask', 'DefaultGateway')
+    $moving = @{}
     $narrow = @{ DeviceColumns = @(); AnalyticsColumns = @(); Cameras = @{}; Order = @(); Format = 'cct' }
     if ($null -ne $actual) { $narrow.DeviceColumns = $actual.DeviceColumns; $narrow.AnalyticsColumns = $actual.AnalyticsColumns }
     foreach ($mac in $wanted.Order) {
@@ -1103,59 +1148,71 @@ if ($mode -eq 'rollback') {
         $device = @() + $other.Device
         $analytics = @()
         foreach ($row in $other.Analytics) { $analytics += ,(@() + $row) }
+        $touched = @{}
         foreach ($a in $applied[$mac]) {
             if ($a[1] -lt 0) {
                 $k = [array]::IndexOf($actual.DeviceColumns, $a[0])
-                if ($k -ge 0) { $device[$k] = Quote $a[0] $a[2] }
+                if ($k -ge 0) { $device[$k] = Quote $a[0] $a[2]; $touched[$a[0]] = $true }
             } else {
                 $k = [array]::IndexOf($actual.AnalyticsColumns, $a[0])
                 if ($k -ge 0 -and $a[1] -lt $analytics.Count) { $analytics[$a[1]][$k] = $a[2] }
             }
+        }
+        $addressEdited = $false
+        foreach ($c in $netAddress) { if ($touched.ContainsKey($c)) { $addressEdited = $true } }
+        $dhcpEdited = $touched.ContainsKey('DHCPEnabled')
+        $dhcpAt = [array]::IndexOf($actual.DeviceColumns, 'DHCPEnabled')
+        $dhcpAsked = ''
+        if ($dhcpAt -ge 0) { $dhcpAsked = Bare $device[$dhcpAt] }
+        if ($addressEdited -and -not $dhcpEdited -and $dhcpAt -ge 0) {
+            $device[$dhcpAt] = Quote 'DHCPEnabled' 'False'
+            $dhcpAsked = 'False'
+        }
+        if ($dhcpAsked -ne 'False') {
+            foreach ($c in $netAddress) {
+                $k = [array]::IndexOf($actual.DeviceColumns, $c)
+                if ($k -ge 0) { $device[$k] = '' }
+            }
+        }
+        if ($addressEdited -or $dhcpEdited) {
+            $ipAt = [array]::IndexOf($actual.DeviceColumns, 'IpAddress')
+            $ipTo = ''
+            if ($ipAt -ge 0) { $ipTo = Bare $device[$ipAt] }
+            $moving[$mac] = @{ From = (Field $actual $other 'IpAddress'); To = $ipTo; Static = ($dhcpAsked -eq 'False') }
         }
         $narrow.Cameras[$mac] = @{ Device = $device; Analytics = $analytics }
         $narrow.Order += $mac
     }
     if ($narrow.Order.Count -gt 0) { Write-Native $narrow (Join-Path $out 'settings.csv') }
 
-    # The CCT runs. Neighbouring changed cameras share one run; a run breaks at a /24 edge and
-    # wherever a camera that is not changing sits between two that are, so no camera outside the
-    # change is ever logged into. The proof export also walks the address a camera is moving to.
-    function Ranges($addresses, $avoid) {
-        $runs = @()
-        $start = [long]-1
-        $prev = [long]-1
-        foreach ($n in @($addresses | Sort-Object -Unique)) {
-            $n = [long]$n
-            $join = $false
-            if ($start -ge 0 -and [Math]::Floor($n / 256) -eq [Math]::Floor($prev / 256)) {
-                $join = $true
-                for ($x = $prev + 1; $x -lt $n; $x++) { if ($avoid.ContainsKey([long]$x)) { $join = $false; break } }
-            }
-            if (-not $join) {
-                if ($start -ge 0) { $runs += ((Long-Ip $start) + ' ' + (Long-Ip $prev)) }
-                $start = $n
-            }
-            $prev = $n
-        }
-        if ($start -ge 0) { $runs += ((Long-Ip $start) + ' ' + (Long-Ip $prev)) }
-        return ,$runs
-    }
+    # The CCT runs, in two passes: every camera whose network is staying put first, then the ones
+    # that are moving. A camera that changes address is gone from the old one the moment it takes,
+    # so it goes last - a failure part way then leaves the reachable cameras done and the risky
+    # ones untouched. Each pass avoids the other's addresses, so a run never reaches past its own
+    # group, and neither reaches a camera that is not changing at all.
     $avoid = @{}
-    $now = @()
+    $plainNow = @()
+    $moveNow = @()
     $later = @()
     if ($null -ne $actual) {
         foreach ($m in $actual.Order) {
             $ipx = Field $actual $actual.Cameras[$m] 'IpAddress'
             if ($ipx -notmatch '^\d{1,3}(\.\d{1,3}){3}$') { continue }
-            if ($changedCameras.ContainsKey($m)) {
-                $now += (Ip-Long $ipx)
-                $ipw = Field $wanted $wanted.Cameras[$m] 'IpAddress'
-                if ($ipw -match '^\d{1,3}(\.\d{1,3}){3}$' -and $ipw -ne $ipx) { $later += (Ip-Long $ipw) }
-            } else { $avoid[(Ip-Long $ipx)] = $true }
+            $n = Ip-Long $ipx
+            if (-not $changedCameras.ContainsKey($m)) { $avoid[$n] = $true; continue }
+            if ($moving.ContainsKey($m)) {
+                $moveNow += $n
+                $to = $moving[$m].To
+                if ($to -match '^\d{1,3}(\.\d{1,3}){3}$' -and $to -ne $ipx) { $later += (Ip-Long $to) }
+            } else { $plainNow += $n }
         }
     }
-    $importRuns = Ranges $now $avoid
-    $afterRuns = Ranges ($now + $later) $avoid
+    $avoidPlain = $avoid.Clone()
+    foreach ($n in $moveNow) { $avoidPlain[[long]$n] = $true }
+    $avoidMove = $avoid.Clone()
+    foreach ($n in $plainNow) { $avoidMove[[long]$n] = $true }
+    $importRuns = @(Ranges $plainNow $avoidPlain) + @(Ranges $moveNow $avoidMove)
+    $afterRuns = @(Ranges ($plainNow + $moveNow + $later) $avoid)
     Set-Content -Path (Join-Path $out 'runlist.txt') -Value $importRuns -Encoding Default
     Set-Content -Path (Join-Path $out 'runlist-after.txt') -Value $afterRuns -Encoding Default
 
@@ -1190,6 +1247,21 @@ if ($mode -eq 'rollback') {
         if ($given -ne '') { $plan += '  NOT IN THE ROLLBACK FILE - the import stops here, nothing is changed:' }
         else { $plan += '  DID NOT ANSWER - the import stops here, nothing is changed:' }
         foreach ($m in $missing) { $plan += ('    ' + $m) }
+    }
+    if ($moving.Count -gt 0) {
+        $plan += ''
+        $plan += '  NETWORK CHANGES - written last, after every other camera:'
+        foreach ($mac in $wanted.Order) {
+            if (-not $moving.ContainsKey($mac)) { continue }
+            $m = $moving[$mac]
+            $to = $m.To
+            if ($to -eq '') { $to = 'an address DHCP gives it' }
+            $how = '   handed to DHCP'
+            if ($m.Static) { $how = '   set static' }
+            $plan += ('    ' + (Who $actual $actual.Cameras[$mac]) + '   ' + $m.From + '  ->  ' + $to + $how)
+        }
+        $plan += '    A camera that does not come back at its new address cannot be reached by the'
+        $plan += '    rollback either. Check the address, the mask and the gateway before going ahead.'
     }
     if ($bad.Count -gt 0) {
         $plan += ''
@@ -1267,7 +1339,7 @@ $r = @()
 $r += 'Import report - ' + $env:SITE + ' - ' + $env:RUNSTART
 $r += 'File imported      : ' + $env:IMPORTCSV
 $r += 'Cameras in file    : ' + $env:CAMERAS
-$r += 'Rollback           : ' + $(if ($given -ne '') { 'from the file ' + $given } else { 'exported now, ' + $env:RUNCOUNT + ' subnets' })
+$r += 'Rollback           : ' + $(if ($given -ne '') { 'from the file ' + $given } else { 'exported now, in ' + $env:ROLLRUNS + ' CCT runs' })
 $r += 'Intended changes   : ' + $env:CHANGES + ' settings on ' + $env:CHANGED + ' cameras'
 $r += 'Written to         : ' + $wanted.Order.Count + ' cameras in ' + (Read-Lines 'runlist.txt').Count + ' CCT runs - no other camera was logged into'
 $r += 'Not reached after  : ' + $missing.Count
@@ -1276,7 +1348,7 @@ $r += 'Left as they were  : ' + $env:BAD + ' cells the file held a value the col
 $r += 'CCT runs failed    : ' + $failed
 $r += ''
 if ($given -eq '') {
-    $r += 'Rollback export, one run per subnet in the file:'
+    $r += 'Rollback export, one run per group of cameras in the file:'
     $r += Table 'runlist-rollback.txt' 'runs-rollback.txt'
     $r += ''
 }

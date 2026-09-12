@@ -76,6 +76,13 @@ Rules that keep you out of trouble:
 - **Type values as a person would.** `true` or `TRUE` in a True/False column, `1920x1080` for a
   resolution, `h264` for an encoding - the import tidies them. A value a column cannot read at
   all is left alone.
+- **Changing an address gives the camera that address permanently.** Type a new `IpAddress`
+  and the tool switches DHCP off for that camera and brings its mask and gateway along from the
+  export, because an address only works with those. Change `SubnetMask` or `DefaultGateway` too if
+  this camera needs different ones. An address you are not changing is not sent at all.
+- **Cameras that move address are written last**, after everything else, and the plan lists them
+  with their old and new address before you type the site name. Read that list: a camera that does
+  not come back at its new address cannot be reached to put it back either.
 - **Blank means leave it alone.** Do not blank a cell to reset a setting; put in the value you
   want.
 - **Fewer rows is fine.** A file holding only the cameras you changed imports just as well as
@@ -118,7 +125,8 @@ Send the folder - `settings.csv` and the backup file at least - back to site.
              to    'acc/C1515 - Rear Entry'
 
    Only the cameras listed are touched. If a cell could not be read it is listed under **LEFT AS THEY ARE**, with
-   the reason, and that camera keeps what it has for that setting.
+   the reason, and that camera keeps what it has for that setting. Anything changing address is
+   listed under **NETWORK CHANGES**, with its old and new address, and is written last.
 4. **Two questions.** `Write this change list to a CSV beside the script? [y/N]` - y gives you a
    file to keep or forward; the list is in the zip either way. Then:
 

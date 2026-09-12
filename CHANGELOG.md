@@ -8,6 +8,16 @@ below.
 
 ## 1.0.x — in progress
 
+- **1.0.3** Changing a camera's address in `settings.csv` now means what you would expect: the
+  camera is given that address **statically**, with its mask and gateway carried over unless you
+  changed those too. It used to send the new address with DHCP still switched on, which CCT
+  refuses outright - and it refuses the whole file, so nothing was written at all. Addresses that
+  are not changing are no longer sent, so a rollback that has drifted can no longer have a file
+  refused. Cameras that move address are written **last**, after everything else, and the plan
+  names them with their old and new address and what it costs to get one wrong.
+  The rollback export no longer walks whole subnets either - it reads only the addresses the file
+  names, so a two-camera job is two addresses rather than two 256-address sweeps.
+
 - **1.0.2** A file dropped onto `import.bat` now survives the administrator prompt. It rode a
   file in `%TEMP%`, which the elevated half of the run cannot always see; it now rides the
   relaunch itself as well.

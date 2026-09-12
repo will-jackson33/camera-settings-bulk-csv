@@ -19,7 +19,7 @@ rem passwords containing !.
 setlocal
 rem One number in three places - here, in "import.bat" and in camerasettings_main.py -
 rem and tests/check_bat.py refuses a mismatch. Bumped on every edit, with its CHANGELOG entry.
-set "VERSION=1.0.2"
+set "VERSION=1.0.3"
 title Camera Configuration Tool - Settings Export %VERSION%
 color 07
 
@@ -996,6 +996,33 @@ function Write-Native($file, [string]$path) {
         foreach ($row in $camera.Analytics) { $lines.Add(($row -join "`t")) }
     }
     [IO.File]::WriteAllLines($path, $lines, [Text.Encoding]::Unicode)
+}
+function Ip-Long([string]$v) { $o = $v -split '\.'; return [long]$o[0]*16777216 + [long]$o[1]*65536 + [long]$o[2]*256 + [long]$o[3] }
+function Long-Ip([long]$n) { return ('{0}.{1}.{2}.{3}' -f (($n -shr 24) -band 255), (($n -shr 16) -band 255), (($n -shr 8) -band 255), ($n -band 255)) }
+function Ranges($addresses, $avoid) {
+    # Addresses grouped into as few CCT runs as possible. Neighbours share a run; a run breaks at a
+    # /24 edge, wherever an address in $avoid sits between two of them - so a run never reaches a
+    # camera outside the group it was built for - and wherever the next address is more than a
+    # short reach away, because walking dead addresses costs more than starting another run.
+    $reach = 32
+    $runs = @()
+    $start = [long]-1
+    $prev = [long]-1
+    foreach ($n in @($addresses | Sort-Object -Unique)) {
+        $n = [long]$n
+        $join = $false
+        if ($start -ge 0 -and ($n - $prev) -le $reach -and [Math]::Floor($n / 256) -eq [Math]::Floor($prev / 256)) {
+            $join = $true
+            for ($x = $prev + 1; $x -lt $n; $x++) { if ($avoid.ContainsKey([long]$x)) { $join = $false; break } }
+        }
+        if (-not $join) {
+            if ($start -ge 0) { $runs += ((Long-Ip $start) + ' ' + (Long-Ip $prev)) }
+            $start = $n
+        }
+        $prev = $n
+    }
+    if ($start -ge 0) { $runs += ((Long-Ip $start) + ' ' + (Long-Ip $prev)) }
+    return $runs
 }
 function Bare([string]$v) { if ($v.Length -ge 2 -and $v[0] -eq $v[-1] -and @('"', "'") -contains $v[0]) { return $v.Substring(1, $v.Length - 2) }; return $v }
 function Field($file, $camera, [string]$column) { $i = [array]::IndexOf($file.DeviceColumns, $column); if ($i -lt 0) { return '' }; return (Bare $camera.Device[$i]) }

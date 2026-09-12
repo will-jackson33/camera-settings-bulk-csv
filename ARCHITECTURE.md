@@ -125,6 +125,22 @@ The gates in words, any of them stopping with nothing written:
 6. **A proof export afterwards**, held against what CCT was given: what changed, and anything
    that did not take, named per camera and per setting.
 
+**The four network columns are decided together**, because CCT validates them together and
+because an address is the one change that can lose a camera:
+
+- An address typed into the file means a **static** address. DHCP cannot be told to hand out a
+  chosen one, so `DHCPEnabled` goes to `False` and the mask and gateway ride along from the
+  rollback unless the file changed them too. A new address with DHCP still on is refused as
+  `IpAddressAndDHCP` - and CCT refuses the whole file over it, so nothing is written at all.
+- An address that is **not** changing on a DHCP camera is sent blank, which CCT reads as leave it
+  alone. That is the only way a rollback that has drifted from the site cannot get a file refused.
+- A camera already on a static address keeps all three, because CCT requires them.
+
+**Cameras that move address are written last**, in their own CCT runs after every other camera, so
+a failure part way leaves the reachable cameras done and the risky ones untouched. The plan names
+them with their old and new address, and says plainly that a camera which does not come back at its
+new address cannot be reached by the rollback either.
+
 **Only the cameras that change are touched.** The file CCT reads holds just those cameras, each
 built from the rollback's own row with only the changed cells applied. The address ranges are
 groups of neighbouring changed cameras, split wherever a camera that is not changing sits
