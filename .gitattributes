@@ -1,0 +1,6 @@
+# Line endings are part of the product. CMD reads a batch file line by line, and a Unix ending in
+# the wrong place changes what runs - so the two scripts and check.cmd are CRLF on every platform,
+# in every clone and in the zip GitHub builds. Everything else is text with the platform's ending.
+* text=auto
+*.bat text eol=crlf
+*.cmd text eol=crlf

@@ -1,5 +1,8 @@
 # Camera settings - user guide
 
+Reads the settings of every Avigilon camera on a site into a spreadsheet, and writes the edited
+ones back, through Motorola's Camera Configuration Tool - no VMS server access needed.
+
 For the person on site and the person at the desk. Two scripts, one spreadsheet, no installing.
 How it is built, and why: `ARCHITECTURE.md`.
 

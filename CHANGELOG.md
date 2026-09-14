@@ -8,6 +8,12 @@ below.
 
 ## 1.0.x — in progress
 
+- **1.0.7** Made fit to publish. The test fixtures use invented camera names and addresses
+  rather than ones lifted from a real export; comments no longer cite documents that live outside
+  the repository; `.gitattributes` keeps the batch files CRLF in every clone and in the zip GitHub
+  builds, because CMD reads a script line by line and a Unix ending in the wrong place changes what
+  runs. Released under the MIT licence. No behaviour changed.
+
 - **1.0.6** A job that changes nothing but `Name` and `Location` now finishes in **one** CCT run:
   the cameras are not read back, because a name cannot quietly go wrong in a way that matters and
   a rename that did not take is visible in the Control Center anyway. Anything touching how a

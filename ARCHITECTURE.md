@@ -240,6 +240,9 @@ Upgrading a site: go straight to 2.16.0.0.
     import.bat                CMD, one file, the only script that changes a camera. Six blocks
     README.md                 the user guide
     ARCHITECTURE.md           this file
+    .gitattributes            the batch files are CRLF in every clone and in GitHub's zip - CMD reads
+                              a script line by line, and a Unix ending in the wrong place changes what runs
+    LICENSE                   MIT
     pyproject.toml            the Python tooling's configuration
     src\camerasettings\       Python: the reference reading of CCT's file, the column table, and the
                               desk tools (a sheet-driven editor and a compare report for CCT's file)
