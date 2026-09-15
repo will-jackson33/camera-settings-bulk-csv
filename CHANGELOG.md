@@ -8,6 +8,8 @@ below.
 
 ## 1.0.x — in progress
 
+- **1.0.8** The README's pointer to `ARCHITECTURE.md` is a link you can click. No behaviour changed.
+
 - **1.0.7** Made fit to publish. The test fixtures use invented camera names and addresses
   rather than ones lifted from a real export; comments no longer cite documents that live outside
   the repository; `.gitattributes` keeps the batch files CRLF in every clone and in the zip GitHub

@@ -4,7 +4,7 @@ Reads the settings of every Avigilon camera on a site into a spreadsheet, and wr
 ones back, through Motorola's Camera Configuration Tool - no VMS server access needed.
 
 For the person on site and the person at the desk. Two scripts, one spreadsheet, no installing.
-How it is built, and why: `ARCHITECTURE.md`.
+How it is built, and why: [ARCHITECTURE.md](ARCHITECTURE.md).
 
     1  On site     run  export.bat      reads every camera into a zip. Changes nothing.
     2  At a desk   open settings.csv from the zip in Excel, change what needs changing, save.
